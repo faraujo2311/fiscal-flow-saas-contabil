@@ -1,0 +1,6 @@
+{
+  "name": "SaaS Contábil, Fiscal e Folha",
+  "description": "Plataforma SaaS multi-tenant para escritórios de contabilidade com motor fiscal de XMLs, apuração de impostos, plano de contas com partidas dobradas, balancete, DRE, folha de pagamento e central de obrigações SPED/eSocial.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
