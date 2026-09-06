@@ -98,6 +98,67 @@ function useLocalStorageState<T>(key: string, initialValue: T): [T, React.Dispat
   return [storedValue, setStoredValue];
 }
 
+/**
+ * Hook de sessão de autenticação:
+ * - Isola a sessão do usuário autenticado por aba/navegador (sessionStorage com persistência na aba ativa)
+ * - Evita compartilhamento indevido ou contaminação de credenciais entre contas de usuários diferentes
+ * - Ao efetuar Logout, elimina completamente a sessão ativa
+ */
+function useSessionAuthState(): [
+  { isAuthenticated: boolean; activeUserId: string },
+  (auth: boolean, userId?: string) => void
+] {
+  const getInitialAuth = (): { isAuthenticated: boolean; activeUserId: string } => {
+    try {
+      if (typeof window === 'undefined') return { isAuthenticated: false, activeUserId: '' };
+
+      // 1. Prioridade: sessionStorage (sessão estrita e isolada da aba atual)
+      const sessionAuth = window.sessionStorage.getItem('saas_contabil_auth_active');
+      const sessionUserId = window.sessionStorage.getItem('saas_contabil_active_user_id');
+      if (sessionAuth === 'true' && sessionUserId) {
+        return { isAuthenticated: true, activeUserId: sessionUserId };
+      }
+
+      // 2. Fallback controlado: localStorage (se logado na mesma janela em sessão anterior)
+      const localAuth = window.localStorage.getItem('saas_contabil_auth_active');
+      const localUserId = window.localStorage.getItem('saas_contabil_active_user_id');
+      if (localAuth === 'true' && localUserId) {
+        window.sessionStorage.setItem('saas_contabil_auth_active', 'true');
+        window.sessionStorage.setItem('saas_contabil_active_user_id', localUserId);
+        return { isAuthenticated: true, activeUserId: localUserId };
+      }
+    } catch (err) {
+      console.warn('Erro ao ler sessão de autenticação:', err);
+    }
+    return { isAuthenticated: false, activeUserId: '' };
+  };
+
+  const [authState, setAuthState] = useState(getInitialAuth);
+
+  const setAuth = (auth: boolean, userId: string = '') => {
+    setAuthState({ isAuthenticated: auth, activeUserId: userId });
+    try {
+      if (typeof window !== 'undefined') {
+        if (auth && userId) {
+          window.sessionStorage.setItem('saas_contabil_auth_active', 'true');
+          window.sessionStorage.setItem('saas_contabil_active_user_id', userId);
+          window.localStorage.setItem('saas_contabil_auth_active', 'true');
+          window.localStorage.setItem('saas_contabil_active_user_id', userId);
+        } else {
+          window.sessionStorage.removeItem('saas_contabil_auth_active');
+          window.sessionStorage.removeItem('saas_contabil_active_user_id');
+          window.localStorage.removeItem('saas_contabil_auth_active');
+          window.localStorage.removeItem('saas_contabil_active_user_id');
+        }
+      }
+    } catch (err) {
+      console.warn('Erro ao atualizar sessão de autenticação:', err);
+    }
+  };
+
+  return [authState, setAuth];
+}
+
 export default function App() {
   // Estado Multi-Tenant e Contexto com Persistência
   const [office, setOffice] = useLocalStorageState<OfficeTenant>('saas_contabil_office', initialOffice);
@@ -133,7 +194,7 @@ export default function App() {
   const [userBacklog, setUserBacklog] = useLocalStorageState<UserActivityBacklog[]>('saas_contabil_backlog', initialUserActivityBacklog);
   const [rolePermissions, setRolePermissions] = useLocalStorageState<RolePermissionConfig[]>('audicon_role_permissions', initialRolePermissions);
   
-  // Conciliação e garantia que contas essenciais (como faraujo@gmail.com) existam sempre no estado
+  // Conciliação e garantia que contas essenciais existam sempre no estado
   useEffect(() => {
     setUsers(prevUsers => {
       const existingEmails = new Set(prevUsers.map(u => u.email.toLowerCase()));
@@ -145,10 +206,15 @@ export default function App() {
     });
   }, []);
 
-  // Estado de Autenticação e Usuário Conectado
-  const [isAuthenticated, setIsAuthenticated] = useLocalStorageState<boolean>('saas_contabil_auth_active', false);
-  const [activeUserId, setActiveUserId] = useLocalStorageState<string>('saas_contabil_active_user_id', 'user-admin-faraujo');
-  const activeUser = users.find(u => u.id === activeUserId || u.email.toLowerCase() === 'faraujo@gmail.com') || users[0] || initialSystemUsers[0];
+  // Estado de Autenticação e Sessão de Usuário Conectado
+  const [authState, setAuthSession] = useSessionAuthState();
+  const isAuthenticated = authState.isAuthenticated;
+  const activeUserId = authState.activeUserId;
+
+  // Resolução Estrita do Usuário Conectado: estritamente pelo ID do usuário autenticado na sessão
+  const activeUser: SystemUser = (activeUserId ? users.find(u => u.id === activeUserId || u.email.toLowerCase() === activeUserId.toLowerCase()) : null)
+    || users.find(u => u.id === activeUserId)
+    || (isAuthenticated ? users[0] : initialSystemUsers[0]);
 
   // Controle de Modais e Visualização
   const [isViewingLandingPage, setIsViewingLandingPage] = useState<boolean>(() => {
@@ -195,7 +261,7 @@ export default function App() {
   };
 
   const handleLogout = () => {
-    setIsAuthenticated(false);
+    setAuthSession(false, '');
     showToast('Sessão encerrada com sucesso.');
   };
 
@@ -217,7 +283,7 @@ export default function App() {
       const remainingMs = timeoutMs - elapsed;
 
       if (remainingMs <= 0) {
-        setIsAuthenticated(false);
+        setAuthSession(false, '');
         showToast('Sua sessão expirou devido à inatividade. Faça login novamente para continuar.');
       } else {
         setSessionMinutesRemaining(Math.max(1, Math.ceil(remainingMs / 60000)));
@@ -302,7 +368,7 @@ export default function App() {
       id: `audit-${Date.now()}`,
       companyId: selectedCompany.id,
       timestamp: new Date().toISOString(),
-      usuario: activeUser?.name || 'Carlos Mendes',
+      usuario: activeUser?.name || 'Sistema',
       acao,
       detalhes,
       entidade,
@@ -314,9 +380,9 @@ export default function App() {
   const handleLogBacklog = (action: string, description: string, module: UserActivityBacklog['module']) => {
     const newEntry: UserActivityBacklog = {
       id: `backlog-${Date.now()}`,
-      userId: activeUser?.id || 'user-faraujo',
-      userName: activeUser?.name || 'Administrador',
-      userRole: activeUser?.role || 'ADMINISTRADOR',
+      userId: activeUser?.id || 'user-sessao',
+      userName: activeUser?.name || 'Usuário Autenticado',
+      userRole: activeUser?.role || 'OPERADOR',
       action,
       description,
       module,
@@ -422,8 +488,7 @@ export default function App() {
         }
         return [updatedUser, ...prev];
       });
-      setActiveUserId(updatedUser.id);
-      setIsAuthenticated(true);
+      setAuthSession(true, updatedUser.id);
       setLastActivityTime(Date.now());
       addAuditLog('ATUALIZAR_USUARIO', `Usuário ${updatedUser.name} cadastrou nova senha pessoal no primeiro acesso`, 'SEGURANCA');
       handleLogBacklog('PRIMEIRO_ACESSO', `Senha definitiva cadastrada no primeiro acesso por ${updatedUser.name}`, 'USUARIOS');
@@ -792,10 +857,9 @@ export default function App() {
             if (!prev.some(u => u.id === user.id || u.email.toLowerCase() === user.email.toLowerCase())) {
               return [user, ...prev];
             }
-            return prev;
+            return prev.map(u => u.id === user.id ? user : u);
           });
-          setActiveUserId(user.id);
-          setIsAuthenticated(true);
+          setAuthSession(true, user.id);
           setLastActivityTime(Date.now());
           addAuditLog('ATUALIZAR_USUARIO', `Usuário ${user.name} efetuou login no sistema`, 'SEGURANCA');
           handleLogBacklog('LOGIN', `Login efetuado com sucesso por ${user.name}`, 'USUARIOS');

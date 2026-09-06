@@ -253,6 +253,37 @@ export const Header: React.FC<HeaderProps> = ({
             <div className="absolute top-1.5 right-1.5 w-2 h-2 bg-red-500 rounded-full border-2 border-white"></div>
             <Bell className="w-4 h-4" />
           </div>
+
+          {/* Usuário Ativo Autenticado & Botão de Logout */}
+          {activeUser && (
+            <div className="flex items-center gap-2 pl-2.5 border-l border-slate-200">
+              <div 
+                className={`w-7 h-7 rounded-full ${activeUser.avatarColor || 'bg-blue-600'} text-white font-bold text-[10px] flex items-center justify-center shrink-0 shadow-xs`}
+                title={`Conectado como: ${activeUser.name} (${activeUser.email})`}
+              >
+                {activeUser.name.split(' ').map(n => n[0]).slice(0, 2).join('')}
+              </div>
+              <div className="hidden lg:flex flex-col text-left max-w-[130px]">
+                <span className="text-xs font-bold text-slate-800 leading-tight truncate" title={activeUser.name}>
+                  {activeUser.name}
+                </span>
+                <span className="text-[10px] text-slate-500 font-medium truncate" title={activeUser.email}>
+                  {activeUser.email}
+                </span>
+              </div>
+              {onLogout && (
+                <button
+                  id="btn-header-logout"
+                  type="button"
+                  onClick={onLogout}
+                  title="Encerrar Sessão (Sair da Conta)"
+                  className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors cursor-pointer"
+                >
+                  <LogOut className="w-4 h-4" />
+                </button>
+              )}
+            </div>
+          )}
         </div>
       </div>
     </header>

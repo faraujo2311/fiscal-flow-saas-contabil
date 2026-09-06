@@ -1067,6 +1067,19 @@ export const initialSystemUsers: SystemUser[] = [
     lastLogin: '2026-08-20T11:00:00Z',
     createdAt: '2026-04-10T14:00:00Z',
   },
+  {
+    id: 'user-1788675250501',
+    name: 'Thiago Araújo',
+    email: 'thiagoca85@gmail.com',
+    role: 'ADMINISTRADOR',
+    department: 'Administrador',
+    active: true,
+    avatarColor: 'bg-blue-600',
+    password: 'Admin#2026!Sec@',
+    mustChangePassword: false,
+    lastLogin: '2026-09-05T23:15:00Z',
+    createdAt: '2026-09-05T20:00:00Z',
+  },
 ];
 
 export const initialActivityBacklog: UserActivityBacklog[] = [
