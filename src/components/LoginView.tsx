@@ -12,7 +12,9 @@ import {
   Clock,
   CheckCircle2,
   Eye,
-  EyeOff
+  EyeOff,
+  ArrowLeft,
+  Globe
 } from 'lucide-react';
 import { SystemUser, SystemCustomization } from '../types';
 import { generateCaptcha, CaptchaChallenge } from '../utils/security';
@@ -22,6 +24,7 @@ interface LoginViewProps {
   users: SystemUser[];
   onLoginSuccess: (user: SystemUser) => void;
   onUpdatePasswordAndLogin?: (userId: string, newPassword: string) => void;
+  onBackToLandingPage?: () => void;
 }
 
 export const LoginView: React.FC<LoginViewProps> = ({
@@ -29,6 +32,7 @@ export const LoginView: React.FC<LoginViewProps> = ({
   users,
   onLoginSuccess,
   onUpdatePasswordAndLogin,
+  onBackToLandingPage,
 }) => {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -153,6 +157,26 @@ export const LoginView: React.FC<LoginViewProps> = ({
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-900 via-slate-800 to-blue-950 flex flex-col justify-center items-center p-4 selection:bg-blue-600 selection:text-white">
+      {/* Botão Superior para Voltar à Landing Page */}
+      {onBackToLandingPage && (
+        <div className="w-full max-w-md mb-3 flex items-center justify-between">
+          <button
+            id="btn-back-to-landing-top"
+            type="button"
+            onClick={onBackToLandingPage}
+            className="inline-flex items-center gap-2 px-3.5 py-2 rounded-xl bg-slate-800/90 hover:bg-slate-700 text-slate-200 hover:text-white text-xs font-semibold border border-slate-700 backdrop-blur-sm transition-all shadow-md cursor-pointer group"
+            title="Visualizar a página inicial institucional do portal"
+          >
+            <ArrowLeft className="w-3.5 h-3.5 text-blue-400 group-hover:-translate-x-0.5 transition-transform" />
+            <span>Voltar para a Página Inicial (Landing Page)</span>
+          </button>
+
+          <span className="text-[11px] text-slate-400 hidden sm:inline">
+            Acesso Restrito
+          </span>
+        </div>
+      )}
+
       {/* Container Principal */}
       <div className="w-full max-w-md bg-white rounded-2xl shadow-2xl border border-slate-200 overflow-hidden">
         {/* Cabeçalho Visual da Marca */}
@@ -260,6 +284,29 @@ export const LoginView: React.FC<LoginViewProps> = ({
               <CheckCircle2 className="w-4 h-4" />
               <span>Salvar Senha e Acessar o Sistema</span>
             </button>
+
+            <div className="pt-2 flex items-center justify-between text-xs">
+              <button
+                type="button"
+                onClick={() => {
+                  setIsChangingRequiredPassword(false);
+                  setUserNeedingChange(null);
+                  setError(null);
+                }}
+                className="text-slate-500 hover:text-slate-800 font-medium cursor-pointer"
+              >
+                ← Voltar ao login
+              </button>
+              {onBackToLandingPage && (
+                <button
+                  type="button"
+                  onClick={onBackToLandingPage}
+                  className="text-blue-600 hover:text-blue-800 font-medium cursor-pointer"
+                >
+                  Ir para a Landing Page
+                </button>
+              )}
+            </div>
           </form>
         ) : (
           /* MODO 2: Formulário Padrão de Login */
@@ -417,6 +464,21 @@ export const LoginView: React.FC<LoginViewProps> = ({
                 </>
               )}
             </button>
+
+            {/* Atalho para Landing Page */}
+            {onBackToLandingPage && (
+              <div className="pt-2 border-t border-slate-100 flex flex-col items-center">
+                <button
+                  id="btn-back-to-landing-card"
+                  type="button"
+                  onClick={onBackToLandingPage}
+                  className="w-full py-2 px-3 text-xs text-blue-600 hover:text-blue-800 font-semibold flex items-center justify-center gap-2 rounded-xl hover:bg-blue-50/80 transition-colors cursor-pointer border border-blue-100"
+                >
+                  <Globe className="w-4 h-4 text-blue-600" />
+                  <span>Conhecer o Sistema • Ver Landing Page</span>
+                </button>
+              </div>
+            )}
           </form>
         )}
 

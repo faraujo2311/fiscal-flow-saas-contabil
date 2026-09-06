@@ -138,9 +138,29 @@ export default function App() {
   const activeUser = users.find(u => u.id === activeUserId) || users[0];
 
   // Controle de Modais e Visualização
-  const [isViewingLandingPage, setIsViewingLandingPage] = useState<boolean>(false);
+  const [isViewingLandingPage, setIsViewingLandingPage] = useState<boolean>(() => {
+    if (typeof window !== 'undefined') {
+      const hash = window.location.hash.toLowerCase();
+      const search = window.location.search.toLowerCase();
+      if (hash.includes('landing') || search.includes('landing')) {
+        return true;
+      }
+    }
+    return false;
+  });
   const [isCompanyModalOpen, setIsCompanyModalOpen] = useState<boolean>(false);
   const [isCompetenceModalOpen, setIsCompetenceModalOpen] = useState<boolean>(false);
+
+  // Sincronização com hash da URL (#landing)
+  useEffect(() => {
+    const handleHashChange = () => {
+      if (window.location.hash.toLowerCase().includes('landing')) {
+        setIsViewingLandingPage(true);
+      }
+    };
+    window.addEventListener('hashchange', handleHashChange);
+    return () => window.removeEventListener('hashchange', handleHashChange);
+  }, []);
 
   // Status de Sincronização Automática com Supabase
   const [autoSyncState, setAutoSyncState] = useState<AutoSyncState>({
@@ -726,6 +746,21 @@ export default function App() {
     o => o.status === 'PENDENTE'
   ).length;
 
+  // Renderização da Landing Page Profissional quando solicitada (acessível para visitantes e usuários)
+  if (isViewingLandingPage) {
+    return (
+      <LandingPageView
+        customization={customization}
+        onEnterSystem={() => {
+          setIsViewingLandingPage(false);
+          if (typeof window !== 'undefined' && window.location.hash.toLowerCase().includes('landing')) {
+            window.history.replaceState(null, '', window.location.pathname + window.location.search);
+          }
+        }}
+      />
+    );
+  }
+
   // PORTAL DE LOGIN: Se o usuário não estiver autenticado, exibe a tela de login
   if (!isAuthenticated) {
     return (
@@ -741,16 +776,12 @@ export default function App() {
           showToast(`Bem-vindo(a), ${user.name}!`);
         }}
         onUpdatePasswordAndLogin={handleUpdatePasswordAndLogin}
-      />
-    );
-  }
-
-  // Renderização da Landing Page Profissional quando solicitada
-  if (isViewingLandingPage) {
-    return (
-      <LandingPageView
-        customization={customization}
-        onEnterSystem={() => setIsViewingLandingPage(false)}
+        onBackToLandingPage={() => {
+          setIsViewingLandingPage(true);
+          if (typeof window !== 'undefined') {
+            window.location.hash = 'landing';
+          }
+        }}
       />
     );
   }
