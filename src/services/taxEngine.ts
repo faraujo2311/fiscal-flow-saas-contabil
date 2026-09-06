@@ -100,9 +100,11 @@ export function calculateTaxAssessment(
         multa: 0,
         juros: 0,
         valorTotal: valorDevido,
-        codigoBarras: generateMockBarcode('DAS', valorDevido),
-        linhaDigitavel: generateMockDigitableLine('DAS', valorDevido),
+        codigoBarras: generateSimulationBarcode('DAS', valorDevido),
+        linhaDigitavel: generateSimulationDigitableLine('DAS', valorDevido),
         status: 'A_VENCER',
+        ambiente: 'HOMOLOGACAO_SIMULACAO',
+        avisoLegal: 'DOCUMENTO DEMONSTRATIVO DE MEMÓRIA FISCAL - NÃO REGISTRADO NA CIP/FEBRABAN - NÃO EFETUAR PAGAMENTO',
       });
     }
 
@@ -151,9 +153,11 @@ export function calculateTaxAssessment(
         multa: 0,
         juros: 0,
         valorTotal: saldoApuradoIcms,
-        codigoBarras: generateMockBarcode('ICMS', saldoApuradoIcms),
-        linhaDigitavel: generateMockDigitableLine('ICMS', saldoApuradoIcms),
+        codigoBarras: generateSimulationBarcode('ICMS', saldoApuradoIcms),
+        linhaDigitavel: generateSimulationDigitableLine('ICMS', saldoApuradoIcms),
         status: 'A_VENCER',
+        ambiente: 'HOMOLOGACAO_SIMULACAO',
+        avisoLegal: 'DOCUMENTO DEMONSTRATIVO DE MEMÓRIA FISCAL - NÃO REGISTRADO NA CIP/FEBRABAN - NÃO EFETUAR PAGAMENTO',
       });
     }
 
@@ -169,9 +173,11 @@ export function calculateTaxAssessment(
         multa: 0,
         juros: 0,
         valorTotal: valorPis,
-        codigoBarras: generateMockBarcode('DARF', valorPis),
-        linhaDigitavel: generateMockDigitableLine('DARF', valorPis),
+        codigoBarras: generateSimulationBarcode('DARF', valorPis),
+        linhaDigitavel: generateSimulationDigitableLine('DARF', valorPis),
         status: 'A_VENCER',
+        ambiente: 'HOMOLOGACAO_SIMULACAO',
+        avisoLegal: 'DOCUMENTO DEMONSTRATIVO DE MEMÓRIA FISCAL - NÃO REGISTRADO NA CIP/FEBRABAN - NÃO EFETUAR PAGAMENTO',
       });
     }
 
@@ -187,9 +193,11 @@ export function calculateTaxAssessment(
         multa: 0,
         juros: 0,
         valorTotal: valorCofins,
-        codigoBarras: generateMockBarcode('DARF', valorCofins),
-        linhaDigitavel: generateMockDigitableLine('DARF', valorCofins),
+        codigoBarras: generateSimulationBarcode('DARF', valorCofins),
+        linhaDigitavel: generateSimulationDigitableLine('DARF', valorCofins),
         status: 'A_VENCER',
+        ambiente: 'HOMOLOGACAO_SIMULACAO',
+        avisoLegal: 'DOCUMENTO DEMONSTRATIVO DE MEMÓRIA FISCAL - NÃO REGISTRADO NA CIP/FEBRABAN - NÃO EFETUAR PAGAMENTO',
       });
     }
 
@@ -239,13 +247,20 @@ function getNextDueDay(competencia: string, day: number): string {
   return `${formattedDay}/${formattedMonth}/${dueYear}`;
 }
 
-function generateMockBarcode(tipo: string, valor: number): string {
+/**
+ * Gera representação de código de barras para ambiente de teste/demonstração.
+ * Explicitamente demarcado para prevenir qualquer tentativa de leitura ou pagamento.
+ */
+function generateSimulationBarcode(tipo: string, valor: number): string {
   const vlr = Math.round(valor * 100).toString().padStart(10, '0');
-  const rand = Math.floor(1000000000 + Math.random() * 9000000000);
-  return `858${rand}${vlr}`;
+  return `00000.SIMULACAO.DEMO.${tipo}.${vlr}`;
 }
 
-function generateMockDigitableLine(tipo: string, valor: number): string {
+/**
+ * Gera representação de linha digitável demarcada para simulação de homologação.
+ * Deixa evidente em qualquer leitor ou conferência que o documento não é passível de liquidação financeira.
+ */
+function generateSimulationDigitableLine(tipo: string, valor: number): string {
   const vlr = Math.round(valor * 100).toString().padStart(10, '0');
-  return `85890.00014 92837.194827 81920.394819 1 ${vlr}`;
+  return `[SIMULACAO] ${tipo} DEMO-HOMOLOGACAO VLR: ${vlr} (NAO PAGAR)`;
 }

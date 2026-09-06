@@ -190,6 +190,8 @@ export interface TaxGuide {
   codigoBarras: string;
   linhaDigitavel: string;
   status: 'A_VENCER' | 'PAGO' | 'VENCIDO';
+  ambiente?: 'HOMOLOGACAO_SIMULACAO' | 'PRODUCAO';
+  avisoLegal?: string;
 }
 
 // Módulo Contábil

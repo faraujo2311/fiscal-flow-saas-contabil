@@ -411,10 +411,11 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
               {/* Sincronização SEFAZ */}
               <div className="p-3 bg-slate-50 rounded-lg border border-slate-100 flex items-center justify-between">
                 <div className="flex flex-col">
-                  <span className="text-xs font-bold text-slate-700">Sincronização SEFAZ</span>
-                  <span className="text-[10px] text-emerald-600 font-bold uppercase">Online & Ativo</span>
+                  <span className="text-xs font-bold text-slate-700">Integração SEFAZ DFe</span>
+                  <span className="text-[10px] text-amber-700 font-semibold">Modo Simulação (WebService Desconectado)</span>
+                  <span className="text-[9px] text-slate-400 mt-0.5">Requer backend mTLS com Certificado A1</span>
                 </div>
-                <div className="w-2.5 h-2.5 bg-emerald-500 rounded-full"></div>
+                <span className="w-2.5 h-2.5 bg-amber-500 rounded-full shrink-0" title="WebService SEFAZ não configurado em ambiente de demonstração"></span>
               </div>
 
               {/* Obrigações do mês */}

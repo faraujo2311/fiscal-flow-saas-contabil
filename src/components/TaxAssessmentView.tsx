@@ -11,7 +11,8 @@ import {
   DollarSign, 
   Calendar,
   Eye,
-  Download
+  Download,
+  AlertTriangle
 } from 'lucide-react';
 import { Company, FiscalDocument, TaxAssessment, TaxGuide } from '../types';
 import { calculateTaxAssessment } from '../services/taxEngine';
@@ -273,12 +274,33 @@ export const TaxAssessmentView: React.FC<TaxAssessmentViewProps> = ({
 
           {/* Guias Geradas (DAS, DARF, GNRE) */}
           <div className="bg-white border border-slate-200 rounded-xl p-6 shadow-xs space-y-4">
-            <h2 className="text-sm font-bold text-slate-900 flex items-center gap-2">
-              <Barcode className="w-4 h-4 text-blue-600" />
-              Guias de Recolhimento Geradas para Pagamento
-            </h2>
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-100 pb-3">
+              <div>
+                <h2 className="text-sm font-bold text-slate-900 flex items-center gap-2">
+                  <Barcode className="w-4 h-4 text-blue-600" />
+                  Guias de Recolhimento - Memória e Demonstração de Cálculo
+                </h2>
+                <p className="text-xs text-slate-500 mt-0.5">
+                  Valores apurados a partir dos documentos fiscais escriturados na competência.
+                </p>
+              </div>
+              <div className="flex items-center gap-1.5 px-2.5 py-1 bg-amber-50 border border-amber-200 rounded-lg text-[11px] font-bold text-amber-800 self-start sm:self-auto">
+                <AlertTriangle className="w-3.5 h-3.5 text-amber-600 shrink-0" />
+                <span>Simulação Fiscal - Guias Não Registradas na Rede Bancária</span>
+              </div>
+            </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
+            {/* Banner de Aviso de Segurança Financeira */}
+            <div className="p-3 bg-amber-50/80 border border-amber-200 rounded-xl flex items-start gap-3 text-xs text-amber-900">
+              <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
+              <div>
+                <span className="font-bold">Aviso de Segurança Financeira: </span>
+                As guias apresentadas nesta tela são simulações geradas pelo motor contábil para conferência de alíquotas e partilha. 
+                <strong className="text-amber-950 font-bold ml-1">NÃO EFETUE PAGAMENTO:</strong> estas guias não possuem registro na CIP / Febraban. Em ambiente produtivo, a emissão definitiva com código de barras registrado é realizada via integração webservice da Receita Federal (PGDAS-D / DCTFWeb) ou SEFAZ estadual.
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5 pt-1">
               {currentAssessment.guias.map((guia) => (
                 <div 
                   key={guia.id}
@@ -289,18 +311,21 @@ export const TaxAssessmentView: React.FC<TaxAssessmentViewProps> = ({
                       <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-blue-50 text-blue-700 border border-blue-200">
                         {guia.tipo} - {guia.codigoReceita}
                       </span>
-                      <span className="text-[11px] text-amber-700 font-semibold flex items-center gap-1">
-                        <Clock className="w-3.5 h-3.5 text-amber-600" />
+                      <span className="text-[11px] text-slate-600 font-semibold flex items-center gap-1">
+                        <Clock className="w-3.5 h-3.5 text-slate-500" />
                         Venc: {guia.dataVencimento}
                       </span>
                     </div>
                     <div className="text-xs font-bold text-slate-800 mt-2.5">
                       {guia.descricao}
                     </div>
+                    <div className="mt-1.5 inline-flex items-center gap-1 px-2 py-0.5 bg-rose-50 border border-rose-200 rounded text-[10px] font-bold text-rose-700">
+                      <span>NÃO PAGAR • DEMO</span>
+                    </div>
                   </div>
 
                   <div className="border-t border-slate-200 pt-3">
-                    <div className="text-[10px] text-slate-400 font-bold uppercase">Valor Principal</div>
+                    <div className="text-[10px] text-slate-400 font-bold uppercase">Valor Principal Apurado</div>
                     <div className="text-lg font-bold text-slate-900 mt-0.5">
                       {guia.valorTotal.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
                     </div>
@@ -315,7 +340,7 @@ export const TaxAssessmentView: React.FC<TaxAssessmentViewProps> = ({
                     className="w-full py-2 bg-white hover:bg-blue-50 text-blue-600 border border-slate-200 hover:border-blue-200 rounded-lg text-xs font-bold flex items-center justify-center gap-1.5 transition-colors cursor-pointer shadow-xs"
                   >
                     <Eye className="w-3.5 h-3.5" />
-                    Visualizar / Imprimir Guia
+                    Visualizar Espelho / Memória da Guia
                   </button>
                 </div>
               ))}
@@ -326,11 +351,30 @@ export const TaxAssessmentView: React.FC<TaxAssessmentViewProps> = ({
 
       {/* Modal de Impressão da Guia */}
       {selectedGuide && (
-        <div className="fixed inset-0 z-50 bg-slate-900/50 flex items-center justify-center p-4 backdrop-blur-xs">
-          <div className="bg-white text-slate-900 rounded-2xl w-full max-w-2xl max-h-[90vh] overflow-y-auto shadow-2xl p-6 space-y-5">
+        <div className="fixed inset-0 z-50 bg-slate-900/60 flex items-center justify-center p-4 backdrop-blur-xs">
+          <div className="bg-white text-slate-900 rounded-2xl w-full max-w-2xl max-h-[90vh] overflow-y-auto shadow-2xl p-6 space-y-4">
+            
+            {/* Faixa de Alerta Obrigatório no Topo */}
+            <div className="bg-rose-50 border-2 border-rose-300 rounded-xl p-3.5 flex items-center gap-3 text-rose-900">
+              <AlertTriangle className="w-5 h-5 text-rose-600 shrink-0" />
+              <div className="text-xs">
+                <span className="font-extrabold uppercase tracking-wide">Atenção - Guia de Demonstração / Homologação:</span>
+                <p className="mt-0.5 text-rose-800">
+                  Este documento é uma representação de espelho contábil. Não possui registro bancário na CIP e <strong>NÃO DEVE SER PAGO</strong> em agências ou aplicativos bancários.
+                </p>
+              </div>
+            </div>
+
             {/* Guia Document Header */}
-            <div className="border-2 border-slate-900 p-5 rounded-xl space-y-4">
-              <div className="flex items-start justify-between border-b-2 border-slate-900 pb-4">
+            <div className="relative border-2 border-slate-900 p-5 rounded-xl space-y-4 overflow-hidden bg-white">
+              {/* Tarja D'água Diagonal de Simulação */}
+              <div className="pointer-events-none absolute inset-0 flex items-center justify-center opacity-10 select-none">
+                <span className="text-5xl font-black tracking-widest text-rose-900 rotate-[-25deg] uppercase">
+                  SIMULAÇÃO - NÃO PAGAR
+                </span>
+              </div>
+
+              <div className="flex items-start justify-between border-b-2 border-slate-900 pb-4 relative z-10">
                 <div className="flex items-center gap-3">
                   <div className="w-12 h-12 bg-slate-900 text-white font-bold flex items-center justify-center text-sm rounded-lg">
                     {selectedGuide.tipo}
@@ -340,7 +384,7 @@ export const TaxAssessmentView: React.FC<TaxAssessmentViewProps> = ({
                       {selectedGuide.tipo === 'DAS' ? 'Documento de Arrecadação do Simples Nacional' : 'Documento de Arrecadação de Receitas Federais'}
                     </h2>
                     <div className="text-xs text-slate-600 font-medium">
-                      Ministério da Fazenda / Secretaria Especial da Receita Federal
+                      Demonstrativo de Memória Fiscal • Ambiente de Homologação
                     </div>
                   </div>
                 </div>
@@ -351,7 +395,7 @@ export const TaxAssessmentView: React.FC<TaxAssessmentViewProps> = ({
               </div>
 
               {/* Informações da Empresa Contribuinte */}
-              <div className="grid grid-cols-2 gap-3 text-xs border-b border-slate-200 pb-3">
+              <div className="grid grid-cols-2 gap-3 text-xs border-b border-slate-200 pb-3 relative z-10">
                 <div>
                   <span className="text-slate-500 font-semibold uppercase">Razão Social:</span>
                   <div className="font-bold text-slate-900">{company.razaoSocial}</div>
@@ -371,23 +415,25 @@ export const TaxAssessmentView: React.FC<TaxAssessmentViewProps> = ({
               </div>
 
               {/* Valores */}
-              <div className="bg-slate-100 p-3.5 rounded-lg flex justify-between items-center text-sm font-bold">
-                <span className="text-slate-700">VALOR TOTAL A RECOLHER:</span>
+              <div className="bg-slate-100 p-3.5 rounded-lg flex justify-between items-center text-sm font-bold relative z-10">
+                <span className="text-slate-700">VALOR TOTAL CALCULADO:</span>
                 <span className="text-lg text-slate-900">
                   {selectedGuide.valorTotal.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
                 </span>
               </div>
 
-              {/* Linha Digitável e Código de Barras */}
-              <div className="pt-2 text-center space-y-2.5">
-                <div className="text-xs font-mono font-bold tracking-wider text-slate-800 bg-slate-100 p-2.5 rounded-lg">
+              {/* Linha Digitável e Código de Barras Substituído */}
+              <div className="pt-2 text-center space-y-2.5 relative z-10">
+                <div className="text-xs font-mono font-bold tracking-wider text-slate-800 bg-slate-100 p-2.5 rounded-lg border border-slate-200">
                   {selectedGuide.linhaDigitavel}
                 </div>
-                <div className="h-12 bg-slate-900 text-white flex items-center justify-center font-mono text-xs tracking-widest rounded-lg">
-                  || | ||| | |||| | |||||||| |||| | || | ||| |||| | ||||
-                </div>
-                <div className="text-[10px] text-slate-500">
-                  Autenticação Mecânica / Código de Barras Padrão Febraban
+                <div className="p-3 bg-slate-100 border border-dashed border-slate-300 rounded-lg text-center">
+                  <span className="text-xs font-bold text-slate-700 uppercase tracking-wide block">
+                    [ CÓDIGO DE BARRAS DESABILITADO - GUIA DE SIMULAÇÃO FISCAL ]
+                  </span>
+                  <span className="text-[10px] text-slate-500 block mt-0.5">
+                    Este documento não possui registro bancário na CIP/Febraban e não é passível de leitura por leitores ópticos ou internet banking.
+                  </span>
                 </div>
               </div>
             </div>
@@ -407,7 +453,7 @@ export const TaxAssessmentView: React.FC<TaxAssessmentViewProps> = ({
                 className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-xs font-semibold flex items-center gap-1.5 shadow-xs shadow-blue-200 cursor-pointer transition-colors"
               >
                 <Printer className="w-4 h-4" />
-                Imprimir Guia
+                Imprimir Espelho Demonstrativo
               </button>
             </div>
           </div>

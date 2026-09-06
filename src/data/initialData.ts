@@ -206,13 +206,13 @@ export const initialPostingRules: PostingRule[] = [
 
 export const sampleFiscalXmls = [
   {
-    nome: 'NFe_35260912345678000190550010000492811837482910.xml',
-    chave: '35260912345678000190550010000492811837482910',
+    nome: 'NFe_35260912345678000190550010000492811837482918.xml',
+    chave: '35260912345678000190550010000492811837482918',
     descricao: 'NF-e Saída Venda de Mercadoria (Alpha -> Supermercados São Bento)',
     xmlContent: `<?xml version="1.0" encoding="UTF-8"?>
 <nfeProc versao="4.00" xmlns="http://www.portalfiscal.inf.br/nfe">
   <NFe>
-    <infNFe Id="NFe35260912345678000190550010000492811837482910" versao="4.00">
+    <infNFe Id="NFe35260912345678000190550010000492811837482918" versao="4.00">
       <ide>
         <cUF>35</cUF>
         <cNF>08374829</cNF>

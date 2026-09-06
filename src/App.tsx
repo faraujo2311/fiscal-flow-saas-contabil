@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { 
   initialOffice, 
   initialCompanies, 
@@ -40,27 +40,66 @@ import { CertificatesAndAuditView } from './components/CertificatesAndAuditView'
 import { calculateTaxAssessment } from './services/taxEngine';
 import { autoJournalizeFiscalDocuments } from './services/accountingEngine';
 
-export default function App() {
-  // Estado Multi-Tenant e Contexto
-  const [office] = useState(initialOffice);
-  const [companies, setCompanies] = useState<Company[]>(initialCompanies);
-  const [selectedCompany, setSelectedCompany] = useState<Company>(initialCompanies[0]);
-  const [competences, setCompetences] = useState<Competence[]>(initialCompetences);
-  const [selectedCompetence, setSelectedCompetence] = useState<string>('09/2026');
-  const [activeTab, setActiveTab] = useState<TabId>('dashboard');
+/**
+ * Hook de persistência local para manter o estado da aplicação entre recarregamentos (F5)
+ */
+function useLocalStorageState<T>(key: string, initialValue: T): [T, React.Dispatch<React.SetStateAction<T>>] {
+  const [storedValue, setStoredValue] = useState<T>(() => {
+    try {
+      const item = window.localStorage.getItem(key);
+      if (item !== null) {
+        return JSON.parse(item);
+      }
+    } catch (error) {
+      console.warn(`Erro ao ler localStorage [${key}]:`, error);
+    }
+    return initialValue;
+  });
 
-  // Dados do Domínio
-  const [documents, setDocuments] = useState<FiscalDocument[]>(initialFiscalDocuments);
-  const [assessments, setAssessments] = useState<TaxAssessment[]>([]);
-  const [accounts, setAccounts] = useState<AccountingAccount[]>(initialChartOfAccounts);
-  const [entries, setEntries] = useState<AccountingEntry[]>(initialAccountingEntries);
+  useEffect(() => {
+    try {
+      window.localStorage.setItem(key, JSON.stringify(storedValue));
+    } catch (error) {
+      console.warn(`Erro ao salvar no localStorage [${key}]:`, error);
+    }
+  }, [key, storedValue]);
+
+  return [storedValue, setStoredValue];
+}
+
+export default function App() {
+  // Estado Multi-Tenant e Contexto com Persistência
+  const [office] = useState(initialOffice);
+  const [companies, setCompanies] = useLocalStorageState<Company[]>('saas_contabil_companies', initialCompanies);
+  const [selectedCompanyId, setSelectedCompanyId] = useLocalStorageState<string>('saas_contabil_selected_company_id', initialCompanies[0].id);
+  
+  const selectedCompany = companies.find(c => c.id === selectedCompanyId) || companies[0] || initialCompanies[0];
+  const setSelectedCompany = (comp: Company) => setSelectedCompanyId(comp.id);
+
+  const [competences, setCompetences] = useLocalStorageState<Competence[]>('saas_contabil_competences', initialCompetences);
+  const [selectedCompetence, setSelectedCompetence] = useLocalStorageState<string>('saas_contabil_selected_competence', '09/2026');
+  const [activeTab, setActiveTab] = useLocalStorageState<TabId>('saas_contabil_active_tab', 'dashboard');
+
+  // Dados do Domínio com Persistência Local Real (Preservados após F5)
+  const [documents, setDocuments] = useLocalStorageState<FiscalDocument[]>('saas_contabil_documents', initialFiscalDocuments);
+  const [assessments, setAssessments] = useLocalStorageState<TaxAssessment[]>('saas_contabil_assessments', []);
+  const [accounts, setAccounts] = useLocalStorageState<AccountingAccount[]>('saas_contabil_accounts', initialChartOfAccounts);
+  const [entries, setEntries] = useLocalStorageState<AccountingEntry[]>('saas_contabil_entries', initialAccountingEntries);
   const [postingRules] = useState(initialPostingRules);
-  const [employees, setEmployees] = useState<Employee[]>(initialEmployees);
-  const [payslips, setPayslips] = useState<PayrollPayslip[]>([]);
-  const [obligations, setObligations] = useState<TaxObligation[]>(initialObligations);
-  const [certificates, setCertificates] = useState<DigitalCertificate[]>(initialCertificates);
-  const [submissions, setSubmissions] = useState<GovSubmission[]>(initialSubmissions);
-  const [auditLogs, setAuditLogs] = useState<AuditLog[]>(initialAuditLogs);
+  const [employees, setEmployees] = useLocalStorageState<Employee[]>('saas_contabil_employees', initialEmployees);
+  const [payslips, setPayslips] = useLocalStorageState<PayrollPayslip[]>('saas_contabil_payslips', []);
+  const [obligations, setObligations] = useLocalStorageState<TaxObligation[]>('saas_contabil_obligations', initialObligations);
+  const [certificates, setCertificates] = useLocalStorageState<DigitalCertificate[]>('saas_contabil_certificates', initialCertificates);
+  const [submissions, setSubmissions] = useLocalStorageState<GovSubmission[]>('saas_contabil_submissions', initialSubmissions);
+  const [auditLogs, setAuditLogs] = useLocalStorageState<AuditLog[]>('saas_contabil_audit_logs', initialAuditLogs);
+
+  // Redefinir Dados de Demonstração
+  const handleResetDemoData = () => {
+    if (window.confirm('Tem certeza de que deseja restaurar os dados para os padrões iniciais de demonstração? Todas as apurações e alterações salvas localmente serão reiniciadas.')) {
+      localStorage.clear();
+      window.location.reload();
+    }
+  };
 
   // Toast Notificação
   const [toastMessage, setToastMessage] = useState<string | null>(null);
@@ -270,6 +309,7 @@ export default function App() {
         selectedCompetence={selectedCompetence}
         onSelectCompetence={setSelectedCompetence}
         onToggleCompetenceStatus={handleToggleCompetenceStatus}
+        onResetData={handleResetDemoData}
       />
 
       {/* Main Container com Barra Lateral e Conteúdo */}

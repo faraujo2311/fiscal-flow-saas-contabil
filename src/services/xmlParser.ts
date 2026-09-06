@@ -6,6 +6,64 @@ export interface ParseXmlResult {
   error?: string;
 }
 
+/**
+ * Calcula o Dígito Verificador (DV) da chave de acesso da NF-e (44º dígito)
+ * através do algoritmo oficial da SEFAZ (Módulo 11, pesos de 2 a 9 da direita para a esquerda).
+ */
+export function calcularDvNFe(chave43: string): number {
+  const pesos = [2, 3, 4, 5, 6, 7, 8, 9];
+  let soma = 0;
+  let pesoIdx = 0;
+
+  for (let i = chave43.length - 1; i >= 0; i--) {
+    const digito = parseInt(chave43[i], 10);
+    soma += digito * pesos[pesoIdx];
+    pesoIdx = (pesoIdx + 1) % pesos.length;
+  }
+
+  const resto = soma % 11;
+  return (resto === 0 || resto === 1) ? 0 : 11 - resto;
+}
+
+/**
+ * Valida se a chave de acesso possui 44 dígitos numéricos e se o DV confere com o Módulo 11.
+ */
+export function validarChaveAcessoNFe(chave: string): { valido: boolean; motivo?: string; dvCalculado?: number; dvInformado?: number } {
+  const clean = chave.replace(/\D/g, '');
+  if (clean.length !== 44) {
+    return {
+      valido: false,
+      motivo: `Chave possui ${clean.length} dígitos numéricos. O padrão SEFAZ exige exatamente 44 dígitos.`
+    };
+  }
+
+  const chave43 = clean.slice(0, 43);
+  const dvInformado = parseInt(clean[43], 10);
+  const dvCalculado = calcularDvNFe(chave43);
+
+  if (dvInformado !== dvCalculado) {
+    return {
+      valido: false,
+      motivo: `Dígito Verificador inconsistente: informado [${dvInformado}], calculado pelo Módulo 11 [${dvCalculado}].`,
+      dvCalculado,
+      dvInformado
+    };
+  }
+
+  return { valido: true, dvCalculado, dvInformado };
+}
+
+/**
+ * Conversão segura de valores monetários com arredondamento preciso de centavos (2 casas decimais)
+ * prevenindo imperfeições de ponto flutuante binário (IEEE 754).
+ */
+function parseCurrency(val: string | null | undefined): number {
+  if (!val) return 0;
+  const num = parseFloat(val.trim());
+  if (isNaN(num)) return 0;
+  return Math.round((num + Number.EPSILON) * 100) / 100;
+}
+
 export function parseFiscalXml(
   xmlContent: string, 
   tenantId: string, 
@@ -22,7 +80,7 @@ export function parseFiscalXml(
     if (parserError) {
       return {
         success: false,
-        error: `Estrutura XML inválida: ${parserError.textContent?.slice(0, 120)}`
+        error: `Estrutura XML corrompida ou inválida: ${parserError.textContent?.slice(0, 120)}`
       };
     }
 
@@ -33,14 +91,31 @@ export function parseFiscalXml(
     if (!infNFe && !infCte) {
       return {
         success: false,
-        error: 'Arquivo XML não contém tag raiz <infNFe> ou <infCte> reconhecida pelo padrão SEFAZ.'
+        error: 'Arquivo XML rejeitado: Não contém a tag raiz <infNFe> ou <infCte> preconizada pelo manual da SEFAZ.'
       };
     }
 
     if (infNFe) {
       const idAttr = infNFe.getAttribute('Id') || '';
       const rawChave = idAttr.replace(/^NFe/, '').trim();
-      const chaveAcesso = rawChave || `3526${Date.now()}${Math.floor(Math.random() * 1000000000000000)}`;
+
+      // NUNCA inventar chave de acesso: exigir chave real de 44 dígitos
+      if (!rawChave) {
+        return {
+          success: false,
+          error: 'Arquivo XML rejeitado: Atributo "Id" ausente ou vazio na tag <infNFe>. Chaves de acesso não podem ser inventadas arbitrariamente.'
+        };
+      }
+
+      const validacaoChave = validarChaveAcessoNFe(rawChave);
+      if (!validacaoChave.valido) {
+        return {
+          success: false,
+          error: `Arquivo XML rejeitado: Chave de acesso inválida (${rawChave}). ${validacaoChave.motivo}`
+        };
+      }
+
+      const chaveAcesso = rawChave;
 
       // Deduplication check
       if (existingKeys.includes(chaveAcesso)) {
@@ -71,23 +146,23 @@ export function parseFiscalXml(
       const destRazao = dest?.querySelector('xNome')?.textContent?.trim() || 'CONSUMIDOR / DESTINATÁRIO';
       const destUf = dest?.querySelector('enderDest UF')?.textContent?.trim() || 'SP';
 
-      // Total values
+      // Total values com arredondamento monetário preciso
       const total = infNFe.querySelector('total ICMSTot');
-      const vNF = parseFloat(total?.querySelector('vNF')?.textContent || '0');
-      const vProd = parseFloat(total?.querySelector('vProd')?.textContent || '0');
-      const vFrete = parseFloat(total?.querySelector('vFrete')?.textContent || '0');
-      const vSeg = parseFloat(total?.querySelector('vSeg')?.textContent || '0');
-      const vDesc = parseFloat(total?.querySelector('vDesc')?.textContent || '0');
-      const vOutro = parseFloat(total?.querySelector('vOutro')?.textContent || '0');
+      const vNF = parseCurrency(total?.querySelector('vNF')?.textContent);
+      const vProd = parseCurrency(total?.querySelector('vProd')?.textContent);
+      const vFrete = parseCurrency(total?.querySelector('vFrete')?.textContent);
+      const vSeg = parseCurrency(total?.querySelector('vSeg')?.textContent);
+      const vDesc = parseCurrency(total?.querySelector('vDesc')?.textContent);
+      const vOutro = parseCurrency(total?.querySelector('vOutro')?.textContent);
 
       // Impostos Totais
-      const vBC = parseFloat(total?.querySelector('vBC')?.textContent || '0');
-      const vICMS = parseFloat(total?.querySelector('vICMS')?.textContent || '0');
-      const vBCST = parseFloat(total?.querySelector('vBCST')?.textContent || '0');
-      const vST = parseFloat(total?.querySelector('vST')?.textContent || '0');
-      const vIPI = parseFloat(total?.querySelector('vIPI')?.textContent || '0');
-      const vPIS = parseFloat(total?.querySelector('vPIS')?.textContent || '0');
-      const vCOFINS = parseFloat(total?.querySelector('vCOFINS')?.textContent || '0');
+      const vBC = parseCurrency(total?.querySelector('vBC')?.textContent);
+      const vICMS = parseCurrency(total?.querySelector('vICMS')?.textContent);
+      const vBCST = parseCurrency(total?.querySelector('vBCST')?.textContent);
+      const vST = parseCurrency(total?.querySelector('vST')?.textContent);
+      const vIPI = parseCurrency(total?.querySelector('vIPI')?.textContent);
+      const vPIS = parseCurrency(total?.querySelector('vPIS')?.textContent);
+      const vCOFINS = parseCurrency(total?.querySelector('vCOFINS')?.textContent);
 
       const impostos: FiscalTaxBreakdown = {
         baseIcms: vBC,
@@ -114,31 +189,31 @@ export function parseFiscalXml(
         const ncm = prod?.querySelector('NCM')?.textContent?.trim() || '00000000';
         const cfop = prod?.querySelector('CFOP')?.textContent?.trim() || (tpNF === '1' ? '5102' : '1102');
         const uCom = prod?.querySelector('uCom')?.textContent?.trim() || 'UN';
-        const qCom = parseFloat(prod?.querySelector('qCom')?.textContent || '1');
-        const vUnCom = parseFloat(prod?.querySelector('vUnCom')?.textContent || '0');
-        const vProdItem = parseFloat(prod?.querySelector('vProd')?.textContent || '0');
+        const qCom = parseCurrency(prod?.querySelector('qCom')?.textContent) || 1;
+        const vUnCom = parseCurrency(prod?.querySelector('vUnCom')?.textContent);
+        const vProdItem = parseCurrency(prod?.querySelector('vProd')?.textContent);
 
         // Imposto do Item
         const icmsNode = det.querySelector('imposto ICMS');
         const firstIcmsChild = icmsNode?.firstElementChild;
         const cstIcms = firstIcmsChild?.querySelector('CST')?.textContent || firstIcmsChild?.querySelector('CSOSN')?.textContent || '00';
-        const itemVBC = parseFloat(firstIcmsChild?.querySelector('vBC')?.textContent || '0');
-        const itemPICMS = parseFloat(firstIcmsChild?.querySelector('pICMS')?.textContent || '0');
-        const itemVICMS = parseFloat(firstIcmsChild?.querySelector('vICMS')?.textContent || '0');
+        const itemVBC = parseCurrency(firstIcmsChild?.querySelector('vBC')?.textContent);
+        const itemPICMS = parseCurrency(firstIcmsChild?.querySelector('pICMS')?.textContent);
+        const itemVICMS = parseCurrency(firstIcmsChild?.querySelector('vICMS')?.textContent);
 
         const pisNode = det.querySelector('imposto PIS');
         const firstPisChild = pisNode?.firstElementChild;
         const cstPis = firstPisChild?.querySelector('CST')?.textContent || '01';
-        const itemVBCPis = parseFloat(firstPisChild?.querySelector('vBC')?.textContent || String(vProdItem));
-        const itemPPIS = parseFloat(firstPisChild?.querySelector('pPIS')?.textContent || '0.65');
-        const itemVPIS = parseFloat(firstPisChild?.querySelector('vPIS')?.textContent || '0');
+        const itemVBCPis = parseCurrency(firstPisChild?.querySelector('vBC')?.textContent) || vProdItem;
+        const itemPPIS = parseCurrency(firstPisChild?.querySelector('pPIS')?.textContent) || 0.65;
+        const itemVPIS = parseCurrency(firstPisChild?.querySelector('vPIS')?.textContent);
 
         const cofinsNode = det.querySelector('imposto COFINS');
         const firstCofinsChild = cofinsNode?.firstElementChild;
         const cstCofins = firstCofinsChild?.querySelector('CST')?.textContent || '01';
-        const itemVBCCofins = parseFloat(firstCofinsChild?.querySelector('vBC')?.textContent || String(vProdItem));
-        const itemPCOFINS = parseFloat(firstCofinsChild?.querySelector('pCOFINS')?.textContent || '3.00');
-        const itemVCOFINS = parseFloat(firstCofinsChild?.querySelector('vCOFINS')?.textContent || '0');
+        const itemVBCCofins = parseCurrency(firstCofinsChild?.querySelector('vBC')?.textContent) || vProdItem;
+        const itemPCOFINS = parseCurrency(firstCofinsChild?.querySelector('pCOFINS')?.textContent) || 3.00;
+        const itemVCOFINS = parseCurrency(firstCofinsChild?.querySelector('vCOFINS')?.textContent);
 
         itens.push({
           id: `item-${Date.now()}-${idx}`,
