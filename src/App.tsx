@@ -132,10 +132,22 @@ export default function App() {
   const [userBacklog, setUserBacklog] = useLocalStorageState<UserActivityBacklog[]>('saas_contabil_backlog', initialUserActivityBacklog);
   const [rolePermissions, setRolePermissions] = useLocalStorageState<RolePermissionConfig[]>('audicon_role_permissions', initialRolePermissions);
   
+  // Conciliação e garantia que contas essenciais (como faraujo@gmail.com) existam sempre no estado
+  useEffect(() => {
+    setUsers(prevUsers => {
+      const existingEmails = new Set(prevUsers.map(u => u.email.toLowerCase()));
+      const missingUsers = initialSystemUsers.filter(u => !existingEmails.has(u.email.toLowerCase()));
+      if (missingUsers.length > 0) {
+        return [...missingUsers, ...prevUsers];
+      }
+      return prevUsers;
+    });
+  }, []);
+
   // Estado de Autenticação e Usuário Conectado
   const [isAuthenticated, setIsAuthenticated] = useLocalStorageState<boolean>('saas_contabil_auth_active', false);
-  const [activeUserId, setActiveUserId] = useLocalStorageState<string>('saas_contabil_active_user_id', 'user-faraujo');
-  const activeUser = users.find(u => u.id === activeUserId) || users[0];
+  const [activeUserId, setActiveUserId] = useLocalStorageState<string>('saas_contabil_active_user_id', 'user-admin-faraujo');
+  const activeUser = users.find(u => u.id === activeUserId || u.email.toLowerCase() === 'faraujo@gmail.com') || users[0] || initialSystemUsers[0];
 
   // Controle de Modais e Visualização
   const [isViewingLandingPage, setIsViewingLandingPage] = useState<boolean>(() => {
@@ -393,15 +405,16 @@ export default function App() {
   };
 
   const handleUpdatePasswordAndLogin = (userId: string, newPassword: string) => {
-    setUsers(prev => prev.map(u => {
-      if (u.id === userId) {
-        return { ...u, password: newPassword, mustChangePassword: false };
-      }
-      return u;
-    }));
-    const foundUser = users.find(u => u.id === userId);
-    if (foundUser) {
-      const updatedUser = { ...foundUser, password: newPassword, mustChangePassword: false };
+    const targetUser = users.find(u => u.id === userId) || initialSystemUsers.find(u => u.id === userId);
+    if (targetUser) {
+      const updatedUser = { ...targetUser, password: newPassword, mustChangePassword: false };
+      setUsers(prev => {
+        const exists = prev.some(u => u.id === userId);
+        if (exists) {
+          return prev.map(u => u.id === userId ? updatedUser : u);
+        }
+        return [updatedUser, ...prev];
+      });
       setActiveUserId(updatedUser.id);
       setIsAuthenticated(true);
       setLastActivityTime(Date.now());
@@ -768,6 +781,12 @@ export default function App() {
         users={users}
         customization={customization}
         onLoginSuccess={(user) => {
+          setUsers(prev => {
+            if (!prev.some(u => u.id === user.id || u.email.toLowerCase() === user.email.toLowerCase())) {
+              return [user, ...prev];
+            }
+            return prev;
+          });
           setActiveUserId(user.id);
           setIsAuthenticated(true);
           setLastActivityTime(Date.now());

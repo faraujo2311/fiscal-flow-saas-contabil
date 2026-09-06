@@ -18,6 +18,7 @@ import {
 } from 'lucide-react';
 import { SystemUser, SystemCustomization } from '../types';
 import { generateCaptcha, CaptchaChallenge } from '../utils/security';
+import { initialSystemUsers } from '../data/initialData';
 
 interface LoginViewProps {
   customization: SystemCustomization;
@@ -82,8 +83,10 @@ export const LoginView: React.FC<LoginViewProps> = ({
     setIsLoading(true);
 
     setTimeout(() => {
-      // Procurar usuário por e-mail (case insensitive)
-      const foundUser = users.find(u => u.email.toLowerCase() === email.trim().toLowerCase());
+      // Procurar usuário por e-mail (case insensitive) em users e fallback garantido em initialSystemUsers
+      const normalizedEmail = email.trim().toLowerCase();
+      const foundUser = users.find(u => u.email.toLowerCase() === normalizedEmail)
+        || initialSystemUsers.find(u => u.email.toLowerCase() === normalizedEmail);
 
       if (!foundUser) {
         setError('E-mail ou credenciais não encontrados no sistema.');
