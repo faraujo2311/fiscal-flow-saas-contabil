@@ -40,7 +40,8 @@ import {
   SystemUser,
   UserActivityBacklog,
   SystemRole,
-  RolePermissionConfig
+  RolePermissionConfig,
+  OfficeTenant
 } from './types';
 import { Header } from './components/Header';
 import { Sidebar, TabId } from './components/Sidebar';
@@ -99,7 +100,7 @@ function useLocalStorageState<T>(key: string, initialValue: T): [T, React.Dispat
 
 export default function App() {
   // Estado Multi-Tenant e Contexto com Persistência
-  const [office] = useState(initialOffice);
+  const [office, setOffice] = useLocalStorageState<OfficeTenant>('saas_contabil_office', initialOffice);
   const [companies, setCompanies] = useLocalStorageState<Company[]>('saas_contabil_companies', initialCompanies);
   const [selectedCompanyId, setSelectedCompanyId] = useLocalStorageState<string>('saas_contabil_selected_company_id', initialCompanies[0].id);
   
@@ -335,9 +336,15 @@ export default function App() {
 
   const handleSaveCustomization = (newCustom: SystemCustomization) => {
     setCustomization(newCustom);
-    addAuditLog('PARAMETRIZACAO', `Customização visual e branding atualizados: ${newCustom.systemName}`, 'SISTEMA');
-    handleLogBacklog('ATUALIZAR_CUSTOMIZACAO', `Identidade visual atualizada: ${newCustom.systemName}`, 'CONFIGURACOES');
-    showToast('Personalização e branding aplicados com sucesso.');
+    setOffice(prev => ({
+      ...prev,
+      name: newCustom.officeDisplayName || prev.name,
+      responsavelNome: newCustom.accountantName || prev.responsavelNome,
+      crcResponsavel: newCustom.crc || prev.crcResponsavel,
+    }));
+    addAuditLog('PARAMETRIZACAO', `Customização visual e auditor responsável atualizados: ${newCustom.accountantName || ''} (${newCustom.crc || ''})`, 'SISTEMA');
+    handleLogBacklog('ATUALIZAR_CUSTOMIZACAO', `Identidade visual e auditor atualizados: ${newCustom.systemName}`, 'CONFIGURACOES');
+    showToast('Personalização, auditor responsável e paleta de cores aplicados com sucesso!');
   };
 
   const handleAddUser = (newUser: Omit<SystemUser, 'id' | 'createdAt'>) => {

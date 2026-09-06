@@ -560,6 +560,7 @@ export interface SystemCustomization {
   systemTagline: string;
   shortName: string;
   officeDisplayName: string;
+  accountantName?: string; // Nome do Contador / Auditor Responsável (exibido no topo)
   cnpj: string;
   crc: string;
   primaryThemeColor: 'blue' | 'emerald' | 'indigo' | 'slate' | 'violet';

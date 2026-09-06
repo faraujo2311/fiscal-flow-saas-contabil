@@ -19,6 +19,7 @@ import {
 import { SystemUser, SystemCustomization } from '../types';
 import { generateCaptcha, CaptchaChallenge } from '../utils/security';
 import { initialSystemUsers } from '../data/initialData';
+import { getTheme } from '../utils/theme';
 
 interface LoginViewProps {
   customization: SystemCustomization;
@@ -35,6 +36,7 @@ export const LoginView: React.FC<LoginViewProps> = ({
   onUpdatePasswordAndLogin,
   onBackToLandingPage,
 }) => {
+  const theme = getTheme(customization?.primaryThemeColor);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
@@ -185,7 +187,7 @@ export const LoginView: React.FC<LoginViewProps> = ({
         {/* Cabeçalho Visual da Marca */}
         <div className="bg-slate-900 px-6 py-6 border-b border-slate-800 text-white relative">
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-blue-600 flex items-center justify-center font-bold text-white shadow-lg shadow-blue-500/30 shrink-0">
+            <div className={`w-10 h-10 rounded-xl ${theme.bgPrimary} flex items-center justify-center font-bold text-white shadow-lg ${theme.shadowColor} shrink-0`}>
               <Building2 className="w-6 h-6" />
             </div>
             <div>
@@ -453,7 +455,7 @@ export const LoginView: React.FC<LoginViewProps> = ({
               id="btn-submit-login"
               type="submit"
               disabled={isLoading}
-              className="w-full py-2.5 px-4 bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs rounded-xl shadow-md shadow-blue-500/20 flex items-center justify-center gap-2 cursor-pointer transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+              className={`w-full py-2.5 px-4 ${theme.bgPrimary} ${theme.bgPrimaryHover} text-white font-bold text-xs rounded-xl shadow-md ${theme.shadowColor} flex items-center justify-center gap-2 cursor-pointer transition-all disabled:opacity-50 disabled:cursor-not-allowed`}
             >
               {isLoading ? (
                 <>
@@ -475,9 +477,9 @@ export const LoginView: React.FC<LoginViewProps> = ({
                   id="btn-back-to-landing-card"
                   type="button"
                   onClick={onBackToLandingPage}
-                  className="w-full py-2 px-3 text-xs text-blue-600 hover:text-blue-800 font-semibold flex items-center justify-center gap-2 rounded-xl hover:bg-blue-50/80 transition-colors cursor-pointer border border-blue-100"
+                  className={`w-full py-2 px-3 text-xs ${theme.textPrimary} font-semibold flex items-center justify-center gap-2 rounded-xl hover:bg-slate-50 transition-colors cursor-pointer border border-slate-200`}
                 >
-                  <Globe className="w-4 h-4 text-blue-600" />
+                  <Globe className={`w-4 h-4 ${theme.textPrimary}`} />
                   <span>Conhecer o Sistema • Ver Landing Page</span>
                 </button>
               </div>

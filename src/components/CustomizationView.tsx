@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { 
   Palette, 
   Globe, 
@@ -12,9 +12,12 @@ import {
   Mail,
   ShieldCheck,
   Clock,
-  AlertTriangle
+  AlertTriangle,
+  UserCheck,
+  Check
 } from 'lucide-react';
 import { SystemCustomization } from '../types';
+import { getTheme, themeConfigs, ThemeColor } from '../utils/theme';
 
 interface CustomizationViewProps {
   customization: SystemCustomization;
@@ -33,6 +36,13 @@ export const CustomizationView: React.FC<CustomizationViewProps> = ({
   const [savedSuccess, setSavedSuccess] = useState(false);
   const [activeTab, setActiveTab] = useState<'branding' | 'landing'>('branding');
   const [showResetConfirm, setShowResetConfirm] = useState(false);
+
+  // Sincronizar com mudanças na prop customization
+  useEffect(() => {
+    setFormData(customization);
+  }, [customization]);
+
+  const activeTheme = getTheme(formData.primaryThemeColor);
 
   const handleFieldChange = <K extends keyof SystemCustomization>(field: K, value: SystemCustomization[K]) => {
     setFormData(prev => ({
@@ -61,12 +71,12 @@ export const CustomizationView: React.FC<CustomizationViewProps> = ({
     setTimeout(() => setSavedSuccess(false), 3000);
   };
 
-  const colorThemes = [
-    { id: 'blue', name: 'Azul Executivo', hex: '#2563EB', bgClass: 'bg-blue-600' },
-    { id: 'emerald', name: 'Verde Esmeralda', hex: '#059669', bgClass: 'bg-emerald-600' },
-    { id: 'indigo', name: 'Índigo Moderno', hex: '#4F46E5', bgClass: 'bg-indigo-600' },
-    { id: 'slate', name: 'Slate Corporativo', hex: '#334155', bgClass: 'bg-slate-700' },
-    { id: 'violet', name: 'Violeta Premium', hex: '#7C3AED', bgClass: 'bg-violet-600' },
+  const colorThemes: { id: ThemeColor; name: string; hex: string; bgClass: string; ringColor: string }[] = [
+    { id: 'blue', name: 'Azul Executivo', hex: '#2563EB', bgClass: 'bg-blue-600', ringColor: 'ring-blue-500' },
+    { id: 'emerald', name: 'Verde Esmeralda', hex: '#059669', bgClass: 'bg-emerald-600', ringColor: 'ring-emerald-500' },
+    { id: 'indigo', name: 'Índigo Moderno', hex: '#4F46E5', bgClass: 'bg-indigo-600', ringColor: 'ring-indigo-500' },
+    { id: 'slate', name: 'Slate Corporativo', hex: '#334155', bgClass: 'bg-slate-700', ringColor: 'ring-slate-500' },
+    { id: 'violet', name: 'Violeta Premium', hex: '#7C3AED', bgClass: 'bg-violet-600', ringColor: 'ring-violet-500' },
   ];
 
   return (
@@ -210,18 +220,40 @@ export const CustomizationView: React.FC<CustomizationViewProps> = ({
                   value={formData.officeDisplayName}
                   onChange={e => handleFieldChange('officeDisplayName', e.target.value)}
                   className="w-full text-xs font-bold px-3 py-2 bg-white border border-slate-300 rounded-md focus:ring-1 focus:ring-indigo-500 text-slate-900"
+                  placeholder="Ex: Audicon Contabilidade & Compliance Tributário S/S"
                 />
               </div>
 
               <div>
-                <label className="block text-xs font-bold text-slate-800 mb-1">
-                  CRC do Escritório / Responsável
+                <label className="block text-xs font-bold text-slate-800 mb-1 flex items-center justify-between">
+                  <span>Nome do Contador / Auditor Responsável</span>
+                  <span className="text-[10px] font-semibold text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded">Exibido no Cabeçalho</span>
                 </label>
                 <input
+                  id="input-accountant-name"
+                  type="text"
+                  value={formData.accountantName || ''}
+                  onChange={e => handleFieldChange('accountantName', e.target.value)}
+                  className="w-full text-xs font-bold px-3 py-2 bg-white border border-slate-300 rounded-md focus:ring-1 focus:ring-indigo-500 text-slate-900"
+                  placeholder="Ex: Carlos Eduardo Silva ou Fábio Araújo"
+                />
+                <span className="text-[11px] text-slate-500 mt-1 block">
+                  Exibido no menu superior ao lado do CRC com o selo de conformidade contábil.
+                </span>
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-800 mb-1 flex items-center justify-between">
+                  <span>CRC do Responsável Técnico</span>
+                  <span className="text-[10px] font-semibold text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded">Exibido no Cabeçalho</span>
+                </label>
+                <input
+                  id="input-crc-responsavel"
                   type="text"
                   value={formData.crc}
                   onChange={e => handleFieldChange('crc', e.target.value)}
                   className="w-full text-xs font-mono font-bold px-3 py-2 bg-white border border-slate-300 rounded-md focus:ring-1 focus:ring-indigo-500 text-slate-900"
+                  placeholder="Ex: CRC/SP 1SP234567/O-8"
                 />
               </div>
 
@@ -234,6 +266,7 @@ export const CustomizationView: React.FC<CustomizationViewProps> = ({
                   value={formData.cnpj}
                   onChange={e => handleFieldChange('cnpj', e.target.value)}
                   className="w-full text-xs font-mono font-bold px-3 py-2 bg-white border border-slate-300 rounded-md focus:ring-1 focus:ring-indigo-500 text-slate-900"
+                  placeholder="00.000.000/0001-00"
                 />
               </div>
 
@@ -246,36 +279,152 @@ export const CustomizationView: React.FC<CustomizationViewProps> = ({
                   value={formData.supportEmail}
                   onChange={e => handleFieldChange('supportEmail', e.target.value)}
                   className="w-full text-xs font-semibold px-3 py-2 bg-white border border-slate-300 rounded-md focus:ring-1 focus:ring-indigo-500 text-slate-900"
+                  placeholder="contato@escritorio.cnt.br"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-800 mb-1">
+                  Telefone / WhatsApp de Suporte
+                </label>
+                <input
+                  type="text"
+                  value={formData.supportPhone}
+                  onChange={e => handleFieldChange('supportPhone', e.target.value)}
+                  className="w-full text-xs font-semibold px-3 py-2 bg-white border border-slate-300 rounded-md focus:ring-1 focus:ring-indigo-500 text-slate-900"
+                  placeholder="(11) 3456-7890"
                 />
               </div>
             </div>
 
             {/* Seletor de Cores */}
-            <div className="pt-4 border-t border-slate-100">
-              <label className="block text-xs font-bold text-slate-800 mb-2">
-                Paleta de Cores Primária do Sistema
-              </label>
-              <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
+            <div className="pt-5 border-t border-slate-100">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1 mb-3">
+                <div>
+                  <label className="block text-xs font-bold text-slate-800">
+                    Paleta de Cores Primária do Sistema
+                  </label>
+                  <p className="text-xs text-slate-500">
+                    Define a cor dos botões de ação, cabeçalho de auditoria, navegação ativa e elementos da marca.
+                  </p>
+                </div>
+                <div className="flex items-center gap-2">
+                  <span className="text-[11px] font-bold text-slate-600">Cor Ativa:</span>
+                  <span 
+                    className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-bold text-white shadow-xs"
+                    style={{ backgroundColor: activeTheme.hex }}
+                  >
+                    <span className="w-2 h-2 rounded-full bg-white"></span>
+                    {activeTheme.name}
+                  </span>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 sm:grid-cols-5 gap-3 mb-4">
                 {colorThemes.map(c => {
                   const isSelected = formData.primaryThemeColor === c.id;
                   return (
                     <button
                       key={c.id}
+                      id={`theme-select-${c.id}`}
                       type="button"
-                      onClick={() => handleFieldChange('primaryThemeColor', c.id as any)}
+                      onClick={() => handleFieldChange('primaryThemeColor', c.id)}
                       className={`p-3 rounded-lg border text-left flex items-center gap-3 transition-all cursor-pointer ${
                         isSelected
-                          ? 'border-indigo-600 bg-indigo-50/50 ring-2 ring-indigo-500/20'
-                          : 'border-slate-200 hover:border-slate-300 bg-white'
+                          ? 'border-slate-800 bg-slate-50 ring-2 ring-slate-800/30 shadow-xs'
+                          : 'border-slate-200 hover:border-slate-300 bg-white hover:bg-slate-50/50'
                       }`}
                     >
-                      <span className={`w-5 h-5 rounded-full ${c.bgClass} shrink-0 shadow-xs`}></span>
+                      <span className={`w-5 h-5 rounded-full ${c.bgClass} shrink-0 shadow-xs flex items-center justify-center text-white`}>
+                        {isSelected && <Check className="w-3 h-3 stroke-[3]" />}
+                      </span>
                       <div className="truncate">
                         <div className="text-xs font-bold text-slate-800 truncate">{c.name}</div>
+                        <div className="text-[10px] text-slate-400 font-mono">{c.hex}</div>
                       </div>
                     </button>
                   );
                 })}
+              </div>
+
+              {/* Prévia em Tempo Real dos Componentes com a Paleta Selecionada */}
+              <div className="p-4 rounded-xl border border-slate-200 bg-slate-50/70 space-y-3">
+                <div className="flex items-center justify-between">
+                  <span className="text-[11px] font-bold text-slate-700 uppercase tracking-wider flex items-center gap-1.5">
+                    <Sparkles className="w-3.5 h-3.5 text-amber-500" />
+                    Prévia em Tempo Real com a Paleta "{activeTheme.name}"
+                  </span>
+                  <span className="text-[10px] text-slate-400">
+                    Atualiza imediatamente ao salvar
+                  </span>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                  {/* Mock Cabeçalho */}
+                  <div className="bg-white p-3 rounded-lg border border-slate-200 shadow-xs flex items-center gap-2.5">
+                    <div 
+                      className="w-8 h-8 rounded-lg flex items-center justify-center text-white font-bold shrink-0"
+                      style={{ backgroundColor: activeTheme.hex }}
+                    >
+                      <Building2 className="w-4 h-4" />
+                    </div>
+                    <div className="overflow-hidden">
+                      <div className="text-xs font-bold text-slate-800 truncate">
+                        {formData.officeDisplayName || 'Nome do Escritório'}
+                      </div>
+                      <div className="text-[10px] text-slate-500 flex items-center gap-1">
+                        <span className="font-mono">{formData.crc || 'CRC/UF 123456'}</span>
+                        <span>•</span>
+                        <span className="flex items-center gap-0.5 truncate" style={{ color: activeTheme.hex }}>
+                          <UserCheck className="w-3 h-3 shrink-0" />
+                          {formData.accountantName || 'Nome do Auditor'}
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Mock Item de Navegação Ativo */}
+                  <div className="bg-slate-900 p-3 rounded-lg border border-slate-800 shadow-xs flex items-center justify-between">
+                    <div 
+                      className="px-2.5 py-1.5 rounded text-xs font-semibold flex items-center gap-2 border"
+                      style={{ 
+                        backgroundColor: activeTheme.hex + '20', 
+                        color: activeTheme.hex,
+                        borderColor: activeTheme.hex + '40'
+                      }}
+                    >
+                      <Sparkles className="w-3.5 h-3.5" />
+                      <span>Menu Ativo</span>
+                    </div>
+                    <span 
+                      className="text-[9px] font-bold px-1.5 py-0.5 rounded-full text-white"
+                      style={{ backgroundColor: activeTheme.hex }}
+                    >
+                      Ativo
+                    </span>
+                  </div>
+
+                  {/* Mock Botões de Ação */}
+                  <div className="bg-white p-3 rounded-lg border border-slate-200 shadow-xs flex items-center justify-center gap-2">
+                    <button
+                      type="button"
+                      className="px-3 py-1.5 rounded-lg text-white font-bold text-xs shadow-xs"
+                      style={{ backgroundColor: activeTheme.hex }}
+                    >
+                      Ação Principal
+                    </button>
+                    <span 
+                      className="px-2.5 py-1 rounded-md text-xs font-bold border"
+                      style={{ 
+                        backgroundColor: activeTheme.hex + '15', 
+                        color: activeTheme.hex,
+                        borderColor: activeTheme.hex + '30'
+                      }}
+                    >
+                      Tag Destaque
+                    </span>
+                  </div>
+                </div>
               </div>
             </div>
 

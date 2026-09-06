@@ -968,6 +968,7 @@ export const initialCustomization: SystemCustomization = {
   systemTagline: 'Plataforma Integrada de Inteligência Fiscal, Contábil e SPED',
   shortName: 'Lumen',
   officeDisplayName: 'Audicon Contabilidade & Compliance Tributário S/S',
+  accountantName: 'Carlos Eduardo Silva',
   cnpj: '09.876.543/0001-21',
   crc: 'CRC/SP 1SP234567/O-8',
   primaryThemeColor: 'blue',

@@ -19,6 +19,7 @@ import {
 } from 'lucide-react';
 import { SystemCustomization, SystemUser, RolePermissionConfig } from '../types';
 import { Building2, LogOut } from 'lucide-react';
+import { getTheme } from '../utils/theme';
 
 export type TabId = 
   | 'dashboard' 
@@ -61,6 +62,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
   onOpenCompanyModal,
   onOpenLandingPage,
 }) => {
+  const theme = getTheme(customization?.primaryThemeColor);
   const brandName = customization?.systemName || 'Lumen Contábil';
   const brandShort = customization?.shortName || 'L';
   const officeName = customization?.officeDisplayName || 'Audicon Contabilidade';
@@ -175,12 +177,12 @@ export const Sidebar: React.FC<SidebarProps> = ({
             onClick={() => onSelectTab(item.id)}
             className={`w-full flex items-center justify-between px-3 py-2 rounded-md text-xs transition-colors whitespace-nowrap md:whitespace-normal cursor-pointer ${
               isActive
-                ? 'bg-blue-600/10 text-blue-400 rounded-md border border-blue-600/20 font-semibold'
+                ? `${theme.navActive} rounded-md`
                 : 'text-slate-400 hover:bg-slate-800/80 hover:text-slate-200 font-medium'
             }`}
           >
             <div className="flex items-center gap-3">
-              <span className={isActive ? 'text-blue-400' : 'text-slate-400'}>
+              <span className={isActive ? theme.textPrimaryLight : 'text-slate-400'}>
                 {item.icon}
               </span>
               <span>{item.label}</span>
@@ -201,7 +203,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
       {/* Brand Header */}
       <div className="p-4 flex items-center justify-between border-b border-slate-800/80">
         <div className="flex items-center gap-3 overflow-hidden">
-          <div className="w-8 h-8 bg-blue-600 rounded flex items-center justify-center font-bold text-white text-base shadow-sm shadow-blue-500/20 shrink-0">
+          <div className={`w-8 h-8 ${theme.bgPrimary} rounded flex items-center justify-center font-bold text-white text-base shadow-sm ${theme.shadowColor} shrink-0`}>
             {brandShort}
           </div>
           <div className="overflow-hidden">
@@ -221,7 +223,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
             title="Ver Landing Page Profissional"
             className="p-1.5 text-slate-400 hover:text-white hover:bg-slate-800 rounded-md transition-colors cursor-pointer"
           >
-            <Globe className="w-4 h-4 text-blue-400" />
+            <Globe className={`w-4 h-4 ${theme.textPrimaryLight}`} />
           </button>
         )}
       </div>
