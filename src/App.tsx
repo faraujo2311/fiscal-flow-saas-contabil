@@ -8,10 +8,16 @@ import {
   initialFiscalDocuments, 
   initialAccountingEntries,
   initialEmployees, 
+  initialPartners,
+  initialProfitDistributions,
   initialObligations, 
   initialCertificates, 
   initialSubmissions, 
-  initialAuditLogs 
+  initialAuditLogs,
+  initialAccountingParameters,
+  initialSystemCustomization,
+  initialSystemUsers,
+  initialUserActivityBacklog
 } from './data/initialData';
 import { 
   Company, 
@@ -21,11 +27,18 @@ import {
   AccountingAccount, 
   Employee, 
   PayrollPayslip, 
+  Partner,
+  ProfitDistributionRecord,
   TaxObligation, 
   DigitalCertificate, 
   GovSubmission, 
   AuditLog, 
-  Competence 
+  Competence,
+  AccountingParameters,
+  SystemCustomization,
+  SystemUser,
+  UserActivityBacklog,
+  SystemRole
 } from './types';
 import { Header } from './components/Header';
 import { Sidebar, TabId } from './components/Sidebar';
@@ -34,11 +47,22 @@ import { FiscalView } from './components/FiscalView';
 import { TaxAssessmentView } from './components/TaxAssessmentView';
 import { AccountingView } from './components/AccountingView';
 import { PayrollView } from './components/PayrollView';
+import { PartnersView } from './components/PartnersView';
 import { SpedObligationsView } from './components/SpedObligationsView';
 import { GovTransmissionView } from './components/GovTransmissionView';
 import { CertificatesAndAuditView } from './components/CertificatesAndAuditView';
+import { SupabaseIntegrationView } from './components/SupabaseIntegrationView';
+import { AccountingParametersView } from './components/AccountingParametersView';
+import { CustomizationView } from './components/CustomizationView';
+import { UserManagementView } from './components/UserManagementView';
+import { LandingPageView } from './components/LandingPageView';
 import { calculateTaxAssessment } from './services/taxEngine';
-import { autoJournalizeFiscalDocuments } from './services/accountingEngine';
+import { 
+  autoJournalizeFiscalDocuments, 
+  autoJournalizePayroll, 
+  autoJournalizeProfitDistribution,
+  generateBalanceSheet 
+} from './services/accountingEngine';
 
 /**
  * Hook de persistência local para manter o estado da aplicação entre recarregamentos (F5)
@@ -88,10 +112,31 @@ export default function App() {
   const [postingRules] = useState(initialPostingRules);
   const [employees, setEmployees] = useLocalStorageState<Employee[]>('saas_contabil_employees', initialEmployees);
   const [payslips, setPayslips] = useLocalStorageState<PayrollPayslip[]>('saas_contabil_payslips', []);
+  const [partners, setPartners] = useLocalStorageState<Partner[]>('saas_contabil_partners', initialPartners);
+  const [profitDistributions, setProfitDistributions] = useLocalStorageState<ProfitDistributionRecord[]>('saas_contabil_profit_dist', initialProfitDistributions);
   const [obligations, setObligations] = useLocalStorageState<TaxObligation[]>('saas_contabil_obligations', initialObligations);
   const [certificates, setCertificates] = useLocalStorageState<DigitalCertificate[]>('saas_contabil_certificates', initialCertificates);
   const [submissions, setSubmissions] = useLocalStorageState<GovSubmission[]>('saas_contabil_submissions', initialSubmissions);
   const [auditLogs, setAuditLogs] = useLocalStorageState<AuditLog[]>('saas_contabil_audit_logs', initialAuditLogs);
+
+  // Fase 3: Parâmetros do Especialista, Personalização, Perfis & Usuários
+  const [accountingParameters, setAccountingParameters] = useLocalStorageState<AccountingParameters>('saas_contabil_parameters', initialAccountingParameters);
+  const [customization, setCustomization] = useLocalStorageState<SystemCustomization>('saas_contabil_customization', initialSystemCustomization);
+  const [users, setUsers] = useLocalStorageState<SystemUser[]>('saas_contabil_users', initialSystemUsers);
+  const [userBacklog, setUserBacklog] = useLocalStorageState<UserActivityBacklog[]>('saas_contabil_backlog', initialUserActivityBacklog);
+  const [isViewingLandingPage, setIsViewingLandingPage] = useState<boolean>(false);
+
+  // Dados filtrados e computados para a empresa ativa
+  const companyPartners = partners.filter(p => p.companyId === selectedCompany.id);
+  const companyProfitDistributions = profitDistributions.filter(d => d.companyId === selectedCompany.id);
+
+  // Status de contabilização da folha do mês no Diário Geral
+  const isPayrollJournalized = entries.some(e => e.competencia === selectedCompetence && e.origemTipo === 'FOLHA');
+
+  // Saldo de Lucros Acumulados no Patrimônio Líquido apurado pelo Balanço Patrimonial
+  const balanceSheetCurrent = generateBalanceSheet(accounts, entries);
+  const lucrosItem = balanceSheetCurrent.patrimonioLiquido.find(p => p.nome.toLowerCase().includes('lucro') || p.codigo.startsWith('2.3.02'));
+  const saldoLucrosAcumulados = lucrosItem ? lucrosItem.saldo : 450000;
 
   // Redefinir Dados de Demonstração
   const handleResetDemoData = () => {
@@ -120,6 +165,74 @@ export default function App() {
       timestamp: new Date().toISOString(),
     };
     setAuditLogs(prev => [newLog, ...prev]);
+  };
+
+  // Handlers da Fase 3: Parâmetros, Personalização e Usuários
+  const handleLogBacklog = (action: string, description: string, module: UserActivityBacklog['module']) => {
+    const newEntry: UserActivityBacklog = {
+      id: `backlog-${Date.now()}`,
+      userId: users[0]?.id || 'user-1',
+      userName: users[0]?.name || 'Carlos Mendes',
+      userRole: users[0]?.role || 'ADMINISTRADOR',
+      action,
+      description,
+      module,
+      ip: '192.168.1.100',
+      timestamp: new Date().toISOString(),
+      status: 'SUCESSO',
+    };
+    setUserBacklog(prev => [newEntry, ...prev]);
+  };
+
+  const handleSaveParameters = (newParams: AccountingParameters) => {
+    setAccountingParameters(newParams);
+    addAuditLog('PARAMETRIZACAO', 'Parâmetros contábeis e fiscais do especialista atualizados.', 'SISTEMA');
+    handleLogBacklog('ATUALIZAR_PARAMETROS', 'Configurações de contas e alíquotas salvas', 'CONFIGURACOES');
+    showToast('Parâmetros contábeis atualizados com sucesso.');
+  };
+
+  const handleSaveCustomization = (newCustom: SystemCustomization) => {
+    setCustomization(newCustom);
+    addAuditLog('PARAMETRIZACAO', `Customização visual e branding atualizados: ${newCustom.systemName}`, 'SISTEMA');
+    handleLogBacklog('ATUALIZAR_CUSTOMIZACAO', `Identidade visual atualizada: ${newCustom.systemName}`, 'CONFIGURACOES');
+    showToast('Personalização e branding aplicados com sucesso.');
+  };
+
+  const handleAddUser = (newUser: Omit<SystemUser, 'id' | 'createdAt'>) => {
+    const created: SystemUser = {
+      ...newUser,
+      id: `user-${Date.now()}`,
+      createdAt: new Date().toISOString(),
+    };
+    setUsers(prev => [...prev, created]);
+    addAuditLog('CRIAR_USUARIO', `Novo usuário cadastrado: ${created.name} (${created.role})`, 'SEGURANCA');
+    handleLogBacklog('CRIAR_USUARIO', `Usuário ${created.name} criado com perfil ${created.role}`, 'CONFIGURACOES');
+    showToast(`Usuário ${created.name} adicionado com sucesso.`);
+  };
+
+  const handleToggleUserStatus = (userId: string) => {
+    setUsers(prev => prev.map(u => {
+      if (u.id === userId) {
+        const newStatus = !u.active;
+        addAuditLog('ATUALIZAR_USUARIO', `Status do usuário ${u.name} alterado para ${newStatus ? 'Ativo' : 'Inativo'}`, 'SEGURANCA');
+        handleLogBacklog('ALTERAR_STATUS_USUARIO', `Status de ${u.name} alterado para ${newStatus ? 'Ativo' : 'Inativo'}`, 'CONFIGURACOES');
+        showToast(`Status do usuário atualizado.`);
+        return { ...u, active: newStatus };
+      }
+      return u;
+    }));
+  };
+
+  const handleChangeUserRole = (userId: string, newRole: SystemRole) => {
+    setUsers(prev => prev.map(u => {
+      if (u.id === userId) {
+        addAuditLog('ALTERAR_PERFIL', `Perfil de ${u.name} alterado para ${newRole}`, 'SEGURANCA');
+        handleLogBacklog('ALTERAR_PERFIL_USUARIO', `Perfil de ${u.name} alterado para ${newRole}`, 'CONFIGURACOES');
+        showToast(`Perfil de ${u.name} alterado para ${newRole}.`);
+        return { ...u, role: newRole };
+      }
+      return u;
+    }));
   };
 
   // 1. Fechar / Reabrir Competência
@@ -267,6 +380,69 @@ export default function App() {
     showToast('Redirecionado para Central de Transmissões do eSocial.');
   };
 
+  // 8.1 Contabilização Automática da Folha de Pagamento em Partidas Dobradas
+  const handleJournalizePayroll = () => {
+    const compPayslips = payslips.filter(p => p.competencia === selectedCompetence);
+    if (compPayslips.length === 0) {
+      showToast('Calcule a folha de pagamento antes de efetuar a contabilização.');
+      return;
+    }
+
+    const nextNum = entries.length > 0 ? Math.max(...entries.map(e => e.numero)) + 1 : 1001;
+    const payrollResult = autoJournalizePayroll(selectedCompany.id, selectedCompetence, compPayslips, accounts, nextNum);
+    const newEntries = payrollResult.entries;
+
+    if (newEntries.length === 0) {
+      showToast('Nenhum lançamento gerado para a folha.');
+      return;
+    }
+
+    setEntries(prev => [...newEntries, ...prev]);
+    addAuditLog(
+      'INTEGRAR',
+      `Folha da competência ${selectedCompetence} contabilizada no Livro Diário Geral (${newEntries.length} partidas dobradas registradas).`,
+      'FOLHA'
+    );
+    showToast(`Folha de pagamento de ${selectedCompetence} contabilizada no Diário Geral com sucesso!`);
+  };
+
+  // 8.2 Gestão de Sócios e Pró-labore
+  const handleAddPartner = (newPartner: Partner) => {
+    setPartners(prev => [newPartner, ...prev]);
+    addAuditLog('CRIAR', `Sócio ${newPartner.nome} cadastrado no QSA (${newPartner.participacaoCapitalPercent}% de cota).`, 'FOLHA');
+    showToast(`Sócio ${newPartner.nome} incluído no quadro societário!`);
+  };
+
+  // 8.3 Distribuição de Lucros Isentos com Escrituração e Contabilização Automática
+  const handleDistributeProfits = (distData: Omit<ProfitDistributionRecord, 'id' | 'saldoLucrosDisponivelDepois' | 'reciboNumero' | 'statusContabilizacao'>) => {
+    const nextReciboNum = `REC-LUC-${selectedCompetence.replace('/', '')}-${Math.floor(1000 + Math.random() * 9000)}`;
+    const saldoDepois = Math.max(0, distData.saldoLucrosDisponivelAntes - distData.valorDistribuido);
+    const newRecord: ProfitDistributionRecord = {
+      ...distData,
+      id: `dist-${Date.now()}`,
+      saldoLucrosDisponivelDepois: saldoDepois,
+      reciboNumero: nextReciboNum,
+      statusContabilizacao: 'CONTABILIZADO',
+    };
+
+    setProfitDistributions(prev => [newRecord, ...prev]);
+
+    // Contabilização automática imediata da distribuição de lucros
+    const nextNum = entries.length > 0 ? Math.max(...entries.map(e => e.numero)) + 1 : 1001;
+    const entry = autoJournalizeProfitDistribution(selectedCompany.id, newRecord, accounts, nextNum);
+
+    if (entry) {
+      setEntries(prev => [entry, ...prev]);
+    }
+
+    addAuditLog(
+      'INTEGRAR',
+      `Distribuição de Lucros Isentos de R$ ${distData.valorDistribuido.toFixed(2)} para ${distData.partnerNome} contabilizada (Recibo ${nextReciboNum}).`,
+      'LANCAMENTO_CONTABIL'
+    );
+    showToast(`Distribuição de Lucros para ${distData.partnerNome} efetuada e contabilizada no Diário!`);
+  };
+
   // 9. Obrigações e SPED
   const handleMarkObligationDelivered = (oblId: string, protocol: string) => {
     setObligations(prev => prev.map(o => o.id === oblId ? { ...o, status: 'TRANSMITIDO', protocolo: protocol } : o));
@@ -293,6 +469,38 @@ export default function App() {
     }
   };
 
+  // Restauração a partir da Nuvem Supabase
+  const handleRestoreFromCloud = (cloudData: {
+    companies?: Company[];
+    documents?: FiscalDocument[];
+    accounts?: AccountingAccount[];
+    entries?: AccountingEntry[];
+    employees?: Employee[];
+    payslips?: PayrollPayslip[];
+    partners?: Partner[];
+    distributions?: ProfitDistributionRecord[];
+    obligations?: TaxObligation[];
+    accountingParameters?: AccountingParameters;
+    customization?: SystemCustomization;
+    users?: SystemUser[];
+    userBacklog?: UserActivityBacklog[];
+  }) => {
+    if (cloudData.companies && cloudData.companies.length > 0) setCompanies(cloudData.companies);
+    if (cloudData.documents && cloudData.documents.length > 0) setDocuments(cloudData.documents);
+    if (cloudData.accounts && cloudData.accounts.length > 0) setAccounts(cloudData.accounts);
+    if (cloudData.entries && cloudData.entries.length > 0) setEntries(cloudData.entries);
+    if (cloudData.employees && cloudData.employees.length > 0) setEmployees(cloudData.employees);
+    if (cloudData.payslips && cloudData.payslips.length > 0) setPayslips(cloudData.payslips);
+    if (cloudData.partners && cloudData.partners.length > 0) setPartners(cloudData.partners);
+    if (cloudData.distributions && cloudData.distributions.length > 0) setProfitDistributions(cloudData.distributions);
+    if (cloudData.obligations && cloudData.obligations.length > 0) setObligations(cloudData.obligations);
+    if (cloudData.accountingParameters) setAccountingParameters(cloudData.accountingParameters);
+    if (cloudData.customization) setCustomization(cloudData.customization);
+    if (cloudData.users && cloudData.users.length > 0) setUsers(cloudData.users);
+    if (cloudData.userBacklog && cloudData.userBacklog.length > 0) setUserBacklog(cloudData.userBacklog);
+    showToast('Base de dados restaurada com sucesso a partir do Supabase!');
+  };
+
   // Contadores para Badges do Menu
   const pendingDocsCount = documents.filter(
     d => d.companyId === selectedCompany.id && d.statusContabilizacao === 'PENDENTE'
@@ -301,6 +509,16 @@ export default function App() {
   const pendingObligationsCount = obligations.filter(
     o => o.status === 'PENDENTE'
   ).length;
+
+  // Renderização da Landing Page Profissional quando solicitada
+  if (isViewingLandingPage) {
+    return (
+      <LandingPageView
+        customization={customization}
+        onEnterSystem={() => setIsViewingLandingPage(false)}
+      />
+    );
+  }
 
   return (
     <div className="min-h-screen bg-[#F1F5F9] text-slate-900 flex flex-col font-sans selection:bg-blue-600 selection:text-white">
@@ -315,6 +533,10 @@ export default function App() {
         onSelectCompetence={setSelectedCompetence}
         onToggleCompetenceStatus={handleToggleCompetenceStatus}
         onResetData={handleResetDemoData}
+        onOpenSupabase={() => setActiveTab('supabase')}
+        customization={customization}
+        activeUser={users[0]}
+        onOpenLandingPage={() => setIsViewingLandingPage(true)}
       />
 
       {/* Main Container com Barra Lateral e Conteúdo */}
@@ -324,6 +546,8 @@ export default function App() {
           onSelectTab={setActiveTab}
           pendingDocsCount={pendingDocsCount}
           pendingObligationsCount={pendingObligationsCount}
+          customization={customization}
+          onOpenLandingPage={() => setIsViewingLandingPage(true)}
         />
 
         <main className="flex-1 p-6 md:p-8 overflow-y-auto bg-[#F1F5F9] min-w-0">
@@ -384,9 +608,24 @@ export default function App() {
               competencia={selectedCompetence}
               employees={employees}
               payslips={payslips}
+              partners={companyPartners}
+              isPayrollJournalized={isPayrollJournalized}
               onAddEmployee={handleAddEmployee}
               onSavePayslips={handleSavePayslips}
               onSendToESocial={handleSendToESocial}
+              onJournalizePayroll={handleJournalizePayroll}
+            />
+          )}
+
+          {activeTab === 'socios' && (
+            <PartnersView
+              company={selectedCompany}
+              competencia={selectedCompetence}
+              partners={companyPartners}
+              profitDistributions={companyProfitDistributions}
+              saldoLucrosAcumulados={saldoLucrosAcumulados}
+              onAddPartner={handleAddPartner}
+              onDistributeProfits={handleDistributeProfits}
             />
           )}
 
@@ -396,6 +635,8 @@ export default function App() {
               competencia={selectedCompetence}
               documents={documents}
               obligations={obligations}
+              accounts={accounts}
+              entries={entries}
               onMarkObligationDelivered={handleMarkObligationDelivered}
             />
           )}
@@ -420,6 +661,54 @@ export default function App() {
               activeCompany={selectedCompany}
             />
           )}
+
+          {activeTab === 'supabase' && (
+            <SupabaseIntegrationView
+              companies={companies}
+              documents={documents}
+              accounts={accounts}
+              entries={entries}
+              employees={employees}
+              payslips={payslips}
+              partners={partners}
+              distributions={profitDistributions}
+              obligations={obligations}
+              accountingParameters={accountingParameters}
+              customization={customization}
+              users={users}
+              userBacklog={userBacklog}
+              onRestoreFromCloud={handleRestoreFromCloud}
+              onAuditLog={(acao, desc) => addAuditLog(acao, desc, 'TRANSMISSAO')}
+            />
+          )}
+
+          {activeTab === 'parametros' && (
+            <AccountingParametersView
+              parameters={accountingParameters}
+              onSaveParameters={handleSaveParameters}
+              accounts={accounts}
+              activeCompany={selectedCompany}
+            />
+          )}
+
+          {activeTab === 'personalizacao' && (
+            <CustomizationView
+              customization={customization}
+              onSaveCustomization={handleSaveCustomization}
+              onOpenLandingPage={() => setIsViewingLandingPage(true)}
+            />
+          )}
+
+          {activeTab === 'usuarios' && (
+            <UserManagementView
+              users={users}
+              onAddUser={handleAddUser}
+              onToggleUserStatus={handleToggleUserStatus}
+              onChangeUserRole={handleChangeUserRole}
+              backlog={userBacklog}
+              onLogActivity={handleLogBacklog}
+            />
+          )}
         </main>
       </div>
 
@@ -431,11 +720,11 @@ export default function App() {
             Sistema Conectado (ICP-Brasil & SEFAZ)
           </span>
           <span className="hidden sm:inline text-slate-300">|</span>
-          <span className="hidden sm:inline">V. 1.0.4-pro</span>
+          <span className="hidden sm:inline">V. 2.0.0-fase3</span>
         </div>
         <div className="flex items-center gap-6">
-          <span className="hidden sm:inline">Suporte Central: 0800 123 4567</span>
-          <span>© 2024 Lumen Contábil Solutions</span>
+          <span className="hidden sm:inline">Suporte Central: {customization.supportPhone}</span>
+          <span>© 2026 {customization.systemName} Solutions</span>
         </div>
       </footer>
 

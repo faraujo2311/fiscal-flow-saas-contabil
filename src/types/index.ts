@@ -367,7 +367,58 @@ export interface PayrollPayslip {
   valorFgts: number;
 }
 
+// Sócios, Pró-labore e Distribuição de Lucros (Fase 2)
+export interface Partner {
+  id: string;
+  companyId: string;
+  nome: string;
+  cpf: string;
+  qualificacao: 'SOCIO_ADMINISTRADOR' | 'SOCIO_COTISTA' | 'TITULAR';
+  participacaoCapitalPercent: number; // ex: 60%
+  valorProlaboreMensal: number; // ex: 5000.00
+  dependentesIrrf: number;
+  inssRetidoProlabore: number; // 11% (teto max 908.86)
+  irrfRetidoProlabore: number;
+  prolaboreLiquido: number;
+  chavePix?: string;
+  bancoNome?: string;
+}
+
+export interface ProfitDistributionRecord {
+  id: string;
+  companyId: string;
+  competencia: string;
+  dataDistribuicao: string;
+  partnerId: string;
+  partnerNome: string;
+  partnerCpf: string;
+  valorDistribuido: number;
+  saldoLucrosDisponivelAntes: number;
+  saldoLucrosDisponivelDepois: number;
+  isencaoLegalArtigo: string; // 'Art. 10 da Lei nº 9.249/1995'
+  statusContabilizacao: 'PENDENTE' | 'CONTABILIZADO';
+  reciboNumero: string;
+  documentoRef?: string;
+}
+
+export interface DctfWebSummary {
+  competencia: string;
+  companyId: string;
+  inssSegurados: number;
+  inssPatronal: number;
+  ratFap: number;
+  terceirosOutrasEntidades: number;
+  deducoesSalarioFamiliaMaternidade: number;
+  totalDarfPrevidenciario: number;
+  dataVencimento: string;
+  codigoReceita: string; // ex: 1082-01 ou 0588
+  statusTransmissao: 'PENDENTE' | 'TRANSMITIDO' | 'GUIA_EMITIDA';
+  protocoloEntrega?: string;
+  linhaDigitavel?: string;
+}
+
 // Módulo Obrigações e SPED
+export type SpedFileType = 'EFD_ICMS_IPI' | 'ECD_CONTABIL';
 export interface TaxObligation {
   id: string;
   codigo: string;
@@ -429,9 +480,118 @@ export interface AuditLogEntry {
   timestamp: string;
   usuario: string;
   companyId?: string;
-  entidade: 'DOCUMENTO_FISCAL' | 'APURACAO' | 'LANCAMENTO_CONTABIL' | 'FOLHA' | 'SPED' | 'TRANSMISSAO' | 'COMPETENCIA';
-  acao: 'CRIAR' | 'EDITAR' | 'EXCLUIR' | 'IMPORTAR_XML' | 'APURAR' | 'INTEGRAR' | 'TRANSMITIR' | 'FECHAR';
+  entidade: 'DOCUMENTO_FISCAL' | 'APURACAO' | 'LANCAMENTO_CONTABIL' | 'FOLHA' | 'SPED' | 'TRANSMISSAO' | 'COMPETENCIA' | 'PARAMETROS' | 'SISTEMA' | 'SEGURANCA';
+  acao: 'CRIAR' | 'EDITAR' | 'EXCLUIR' | 'IMPORTAR_XML' | 'APURAR' | 'INTEGRAR' | 'TRANSMITIR' | 'FECHAR' | 'PARAMETRIZACAO' | 'CRIAR_USUARIO' | 'ATUALIZAR_USUARIO' | 'ALTERAR_PERFIL';
   detalhes: string;
 }
 
 export type AuditLog = AuditLogEntry;
+
+// ==================== FASE 3: TIPOS ESPECIAIS ====================
+
+// 1. Configurações do Especialista Contábil (Parâmetros Fiscais & Contábeis)
+export interface AccountingParameters {
+  // Contas Padrão para Contabilização Automática
+  contaVendasMercadorias: string;
+  contaPrestacaoServicos: string;
+  contaClientes: string;
+  contaFornecedores: string;
+  contaEstoqueMercadorias: string;
+  contaCmv: string;
+  contaSalariosAPagar: string;
+  contaDespesaSalarios: string;
+  contaInssAPagar: string;
+  contaFgtsAPagar: string;
+  contaProlaboreAPagar: string;
+  contaDespesaProlabore: string;
+  contaLucrosAcumulados: string;
+  contaImpostosSimples: string;
+  contaPisAPagar: string;
+  contaCofinsAPagar: string;
+  contaIrpjAPagar: string;
+  contaCsllAPagar: string;
+
+  // Parâmetros Tributários & Presunção
+  percentualPresuncaoComercio: number; // ex: 8
+  percentualPresuncaoServico: number;  // ex: 32
+  aliquotaIrpjBase: number;            // ex: 15
+  adicionalIrpjLimiteMensal: number;   // ex: 20000
+  aliquotaAdicionalIrpj: number;       // ex: 10
+  aliquotaCsllBase: number;            // ex: 9
+  aliquotaPisCumulativo: number;       // ex: 0.65
+  aliquotaCofinsCumulativo: number;    // ex: 3.00
+
+  // Simples Nacional & Fator R
+  fatorRLimitePercent: number;         // ex: 28
+
+  // Segurança e Fechamento
+  bloquearLancamentosRetroativos: boolean;
+  exigirPartidasDobradasEstritas: boolean;
+
+  // Parâmetros SPED / ECD
+  planoReferencialRFB: 'PJ_GERAL' | 'PJ_LUCRO_PRESUMIDO' | 'FINANCEIRAS' | 'IMUNES_ISENTAS';
+  versaoLeiauteECD: string;            // ex: '9.00'
+  versaoLeiauteEFD: string;            // ex: '017'
+  qualificacaoSignatario: string;      // ex: '900 - Contador'
+  crcContadorResponsavel: string;
+  nomeContadorResponsavel: string;
+}
+
+// 2. Personalização do Sistema (White-Label & Landing Page)
+export interface LandingPageConfig {
+  heroBadge: string;
+  heroTitle: string;
+  heroSubtitle: string;
+  ctaPrimaryText: string;
+  ctaSecondaryText: string;
+  stat1Number: string;
+  stat1Label: string;
+  stat2Number: string;
+  stat2Label: string;
+  stat3Number: string;
+  stat3Label: string;
+  stat4Number: string;
+  stat4Label: string;
+  whatsappContact: string;
+}
+
+export interface SystemCustomization {
+  systemName: string;
+  systemTagline: string;
+  shortName: string;
+  officeDisplayName: string;
+  cnpj: string;
+  crc: string;
+  primaryThemeColor: 'blue' | 'emerald' | 'indigo' | 'slate' | 'violet';
+  supportEmail: string;
+  supportPhone: string;
+  landingPage: LandingPageConfig;
+}
+
+// 3. Perfis e Gerenciamento de Usuários (RBAC & Backlog)
+export type SystemRole = 'ADMINISTRADOR' | 'ANALISTA' | 'OPERADOR';
+
+export interface SystemUser {
+  id: string;
+  name: string;
+  email: string;
+  role: SystemRole;
+  department: string;
+  active: boolean;
+  avatarColor: string;
+  lastLogin: string;
+  createdAt: string;
+}
+
+export interface UserActivityBacklog {
+  id: string;
+  timestamp: string;
+  userId: string;
+  userName: string;
+  userRole: SystemRole;
+  module: 'FISCAL' | 'CONTABIL' | 'FOLHA' | 'SOCIOS' | 'SPED' | 'SUPABASE' | 'CONFIGURACOES' | 'USUARIOS';
+  action: string;
+  description: string;
+  ip: string;
+  status: 'SUCESSO' | 'ALERTA' | 'BLOQUEADO';
+}

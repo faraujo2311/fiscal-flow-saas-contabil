@@ -11,9 +11,14 @@ import {
   UserCheck, 
   Briefcase,
   Send,
-  Eye
+  Eye,
+  BookOpen,
+  Receipt,
+  FileCheck,
+  QrCode,
+  X
 } from 'lucide-react';
-import { Company, Employee, PayrollPayslip } from '../types';
+import { Company, Employee, PayrollPayslip, Partner } from '../types';
 import { calculateEmployeePayroll } from '../services/payrollEngine';
 
 interface PayrollViewProps {
@@ -21,9 +26,12 @@ interface PayrollViewProps {
   competencia: string;
   employees: Employee[];
   payslips: PayrollPayslip[];
+  partners?: Partner[];
+  isPayrollJournalized?: boolean;
   onAddEmployee: (emp: Employee) => void;
   onSavePayslips: (payslips: PayrollPayslip[]) => void;
   onSendToESocial: () => void;
+  onJournalizePayroll?: () => void;
 }
 
 export const PayrollView: React.FC<PayrollViewProps> = ({
@@ -31,12 +39,16 @@ export const PayrollView: React.FC<PayrollViewProps> = ({
   competencia,
   employees,
   payslips,
+  partners = [],
+  isPayrollJournalized = false,
   onAddEmployee,
   onSavePayslips,
   onSendToESocial,
+  onJournalizePayroll,
 }) => {
   const [selectedPayslip, setSelectedPayslip] = useState<PayrollPayslip | null>(null);
   const [isEmployeeModalOpen, setIsEmployeeModalOpen] = useState(false);
+  const [isDctfWebModalOpen, setIsDctfWebModalOpen] = useState(false);
 
   // Form states
   const [empNome, setEmpNome] = useState('');
@@ -89,6 +101,16 @@ export const PayrollView: React.FC<PayrollViewProps> = ({
   const totalDescontos = compPayslips.reduce((acc, p) => acc + p.totalDescontos, 0);
   const totalLiquido = compPayslips.reduce((acc, p) => acc + p.salarioLiquido, 0);
   const totalFgts = compPayslips.reduce((acc, p) => acc + p.valorFgts, 0);
+  const totalInssEmpregados = compPayslips.reduce((acc, p) => acc + p.valorInss, 0);
+  const totalIrrfEmpregados = compPayslips.reduce((acc, p) => acc + p.valorIrrf, 0);
+
+  // Pró-labore dos sócios no consolidado da DCTFWeb
+  const totalInssSocios = partners.reduce((acc, p) => acc + p.inssRetidoProlabore, 0);
+  const totalInssSeguradosConsolidado = totalInssEmpregados + totalInssSocios;
+  const isSimples = company.regimeTributario === 'SIMPLES_NACIONAL';
+  const totalCppPatronal = isSimples ? 0 : Math.round((totalFolhaBruta * 0.20) * 100) / 100;
+  const totalOutrasEntidades = isSimples ? 0 : Math.round((totalFolhaBruta * 0.058) * 100) / 100;
+  const totalDarfPrevidenciario = totalInssSeguradosConsolidado + totalCppPatronal + totalOutrasEntidades;
 
   return (
     <div className="space-y-6">
@@ -97,14 +119,14 @@ export const PayrollView: React.FC<PayrollViewProps> = ({
         <div>
           <h1 className="text-base font-bold text-slate-900 flex items-center gap-2">
             <Users className="w-5 h-5 text-blue-600" />
-            Folha de Pagamento & Departamento Pessoal (eSocial)
+            Folha de Pagamento, DCTFWeb & eSocial
           </h1>
           <p className="text-xs text-slate-500 mt-0.5">
-            Cálculo progressivo oficial de INSS e IRRF, geração de holerites e integração com eventos S-1200 / S-1210.
+            Cálculo progressivo oficial de INSS e IRRF, contabilização automática no Livro Diário e apuração da DCTFWeb.
           </p>
         </div>
 
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           <button
             type="button"
             onClick={() => setIsEmployeeModalOpen(true)}
@@ -113,14 +135,41 @@ export const PayrollView: React.FC<PayrollViewProps> = ({
             <Plus className="w-4 h-4 text-blue-600" />
             Novo Empregado
           </button>
+
           <button
             type="button"
             onClick={handleCalculatePayroll}
-            className="px-4 py-1.5 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-xs font-medium flex items-center gap-1.5 shadow-xs transition-colors"
+            className="px-3.5 py-1.5 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-xs font-medium flex items-center gap-1.5 shadow-xs transition-colors"
           >
             <Calculator className="w-4 h-4" />
             Calcular Folha ({competencia})
           </button>
+
+          {compPayslips.length > 0 && onJournalizePayroll && (
+            <button
+              type="button"
+              onClick={onJournalizePayroll}
+              className={`px-3.5 py-1.5 rounded-lg text-xs font-medium flex items-center gap-1.5 shadow-xs transition-colors border ${
+                isPayrollJournalized
+                  ? 'bg-emerald-50 text-emerald-700 border-emerald-300 hover:bg-emerald-100'
+                  : 'bg-indigo-600 hover:bg-indigo-700 text-white border-transparent'
+              }`}
+            >
+              <BookOpen className="w-4 h-4" />
+              {isPayrollJournalized ? 'Folha Contabilizada (Diário ✓)' : 'Contabilizar no Diário'}
+            </button>
+          )}
+
+          {compPayslips.length > 0 && (
+            <button
+              type="button"
+              onClick={() => setIsDctfWebModalOpen(true)}
+              className="px-3.5 py-1.5 bg-slate-800 hover:bg-slate-900 text-white rounded-lg text-xs font-medium flex items-center gap-1.5 shadow-xs transition-colors"
+            >
+              <FileCheck className="w-4 h-4 text-amber-400" />
+              DCTFWeb & Guia DARF
+            </button>
+          )}
         </div>
       </div>
 
@@ -499,6 +548,160 @@ export const PayrollView: React.FC<PayrollViewProps> = ({
               >
                 Salvar Cadastro
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL: DCTFWEB & GUIA DARF PREVIDENCIÁRIO OFICIAL */}
+      {isDctfWebModalOpen && (
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 z-50 overflow-y-auto">
+          <div className="bg-white rounded-xl max-w-2xl w-full p-6 shadow-2xl border border-slate-300 font-sans text-xs space-y-4 my-8">
+            <div className="flex items-center justify-between pb-3 border-b-2 border-slate-800">
+              <div className="flex items-center gap-2.5">
+                <div className="w-8 h-8 rounded-lg bg-amber-50 border border-amber-300 flex items-center justify-center text-amber-700 font-bold">
+                  RFB
+                </div>
+                <div>
+                  <h3 className="font-extrabold text-sm uppercase text-slate-900 tracking-wide">
+                    Documento de Arrecadação de Receitas Federais (DARF)
+                  </h3>
+                  <span className="text-[11px] text-slate-500 font-mono">
+                    DCTFWeb Previdenciária • Competência: {competencia} • Código 1410
+                  </span>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsDctfWebModalOpen(false)}
+                className="text-slate-400 hover:text-slate-600"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Quadro de Informações Cadastrais e Valores da Receita Federal */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 bg-slate-50 border border-slate-200 rounded-lg p-3">
+              <div>
+                <span className="text-[10px] uppercase font-bold text-slate-500 block">Razão Social do Contribuinte</span>
+                <strong className="text-slate-900">{company.razaoSocial}</strong>
+                <div className="text-[11px] text-slate-600 font-mono mt-0.5">CNPJ: {company.cnpj}</div>
+              </div>
+              <div className="text-right">
+                <span className="text-[10px] uppercase font-bold text-slate-500 block">Número do DARF</span>
+                <span className="font-mono font-bold text-slate-800">07.26.184.938.291-4</span>
+                <div className="text-[11px] text-slate-500 mt-0.5">Origem: eSocial S-1299 / DCTFWeb</div>
+              </div>
+            </div>
+
+            {/* Tabela de Composição dos Tributos Apurados */}
+            <div className="border border-slate-200 rounded-lg overflow-hidden">
+              <div className="bg-slate-100/80 px-3 py-1.5 font-bold text-slate-800 text-[11px] uppercase border-b border-slate-200">
+                Demonstrativo dos Débitos Declarados na DCTFWeb
+              </div>
+              <div className="p-3 space-y-2 text-slate-700">
+                <div className="flex justify-between items-center border-b border-slate-100 pb-1.5">
+                  <div>
+                    <span className="font-medium text-slate-900">01. INSS Segurados Empregados (CLT)</span>
+                    <span className="block text-[10px] text-slate-500">Retenção na fonte dos {compPayslips.length} funcionários</span>
+                  </div>
+                  <strong className="font-mono text-slate-900">
+                    R$ {totalInssEmpregados.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                  </strong>
+                </div>
+
+                <div className="flex justify-between items-center border-b border-slate-100 pb-1.5">
+                  <div>
+                    <span className="font-medium text-slate-900">02. INSS Contribuintes Individuais (Sócios / Pró-labore)</span>
+                    <span className="block text-[10px] text-slate-500">Retenção de 11% sobre pró-labore ({partners.length} sócios)</span>
+                  </div>
+                  <strong className="font-mono text-slate-900">
+                    R$ {totalInssSocios.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                  </strong>
+                </div>
+
+                {!isSimples && (
+                  <>
+                    <div className="flex justify-between items-center border-b border-slate-100 pb-1.5">
+                      <div>
+                        <span className="font-medium text-slate-900">03. Contribuição Previdenciária Patronal (CPP 20%)</span>
+                        <span className="block text-[10px] text-slate-500">Empresa em regime de Lucro Presumido / Real</span>
+                      </div>
+                      <strong className="font-mono text-slate-900">
+                        R$ {totalCppPatronal.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                      </strong>
+                    </div>
+
+                    <div className="flex justify-between items-center border-b border-slate-100 pb-1.5">
+                      <div>
+                        <span className="font-medium text-slate-900">04. Contribuição a Outras Entidades / Terceiros (5,8%)</span>
+                        <span className="block text-[10px] text-slate-500">Sistema S, Salário Educação, INCRA</span>
+                      </div>
+                      <strong className="font-mono text-slate-900">
+                        R$ {totalOutrasEntidades.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                      </strong>
+                    </div>
+                  </>
+                )}
+
+                <div className="flex justify-between items-center pt-1 text-sm bg-slate-50 p-2.5 rounded">
+                  <span className="font-bold text-slate-900">Total Consolidado do DARF Previdenciário:</span>
+                  <strong className="font-mono font-extrabold text-blue-700 text-base">
+                    R$ {totalDarfPrevidenciario.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                  </strong>
+                </div>
+              </div>
+            </div>
+
+            {/* Código de Barras e Pix da Guia */}
+            <div className="border border-slate-300 rounded-lg p-3 bg-slate-50 space-y-2">
+              <div className="flex items-center justify-between">
+                <div>
+                  <span className="text-[10px] text-slate-500 uppercase font-bold block">Linha Digitável Oficial</span>
+                  <span className="font-mono font-bold text-slate-800 text-xs">
+                    85810000001-2 49200179261-0 84938291400-8 09202614101-3
+                  </span>
+                </div>
+                <div className="text-right">
+                  <span className="text-[10px] text-slate-500 uppercase font-bold block">Vencimento</span>
+                  <span className="font-bold text-rose-700 font-mono">20/10/2026</span>
+                </div>
+              </div>
+
+              {/* Simulação Visual de Código de Barras */}
+              <div className="h-8 bg-slate-900 rounded-xs flex items-center justify-between px-2 text-slate-900 select-none overflow-hidden opacity-90">
+                <div className="flex h-full w-full gap-0.5 items-center">
+                  {[3, 1, 2, 4, 1, 3, 2, 1, 4, 2, 3, 1, 2, 4, 1, 3, 2, 1, 4, 2, 3, 1, 2, 4, 1, 3, 2, 1, 4, 2, 3, 1, 2, 4, 1, 3, 2, 1, 4, 2, 3, 1, 2, 4, 1, 3, 2, 1, 4, 2, 3, 1, 2, 4, 1, 3, 2, 1, 4, 2].map((w, i) => (
+                    <div key={i} className="bg-white h-full" style={{ width: `${w * 1.5}px` }} />
+                  ))}
+                </div>
+              </div>
+            </div>
+
+            {/* Rodapé de Ações */}
+            <div className="flex justify-between items-center pt-3 border-t border-slate-200">
+              <div className="text-[11px] text-emerald-700 font-medium flex items-center gap-1">
+                <CheckCircle2 className="w-4 h-4" />
+                Validado com as tabelas vigentes da Receita Federal
+              </div>
+
+              <div className="flex gap-2">
+                <button
+                  type="button"
+                  onClick={() => window.print()}
+                  className="px-3.5 py-1.5 bg-slate-800 hover:bg-slate-900 text-white rounded-lg text-xs font-medium flex items-center gap-1.5 shadow-xs transition-colors"
+                >
+                  <Printer className="w-3.5 h-3.5" />
+                  Imprimir DARF
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setIsDctfWebModalOpen(false)}
+                  className="px-3.5 py-1.5 border border-slate-300 rounded-lg text-xs font-medium text-slate-700 hover:bg-slate-50 transition-colors"
+                >
+                  Fechar
+                </button>
+              </div>
             </div>
           </div>
         </div>

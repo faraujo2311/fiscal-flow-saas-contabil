@@ -7,7 +7,9 @@ import {
   BalanceSheetReport,
   BalanceSheetItem,
   GeneralLedgerReport,
-  GeneralLedgerLine
+  GeneralLedgerLine,
+  PayrollPayslip,
+  ProfitDistributionRecord
 } from '../types';
 
 export interface TrialBalanceRow {
@@ -615,5 +617,221 @@ export function generateClosingEntries(
     totalReceitas,
     totalDespesas,
     resultadoLiquido,
+  };
+}
+
+/**
+ * Fase 2: Contabilização Automática da Folha de Pagamento em Partidas Dobradas
+ * Apropria salários, encargos patronais (FGTS) e retenções (INSS, IRRF)
+ */
+export function autoJournalizePayroll(
+  companyId: string,
+  competencia: string,
+  payslips: PayrollPayslip[],
+  accounts: AccountingAccount[],
+  startEntryNumber: number = 2001
+): {
+  entries: AccountingEntry[];
+  totalFolhaBruta: number;
+  totalLiquido: number;
+  totalInss: number;
+  totalIrrf: number;
+  totalFgts: number;
+} {
+  const accountsMap = new Map(accounts.map(a => [a.codigo, a]));
+  const compPayslips = payslips.filter(p => p.competencia === competencia);
+
+  const totalFolhaBruta = Math.round(compPayslips.reduce((sum, p) => sum + p.totalProventos, 0) * 100) / 100;
+  const totalLiquido = Math.round(compPayslips.reduce((sum, p) => sum + p.salarioLiquido, 0) * 100) / 100;
+  const totalInss = Math.round(compPayslips.reduce((sum, p) => sum + p.valorInss, 0) * 100) / 100;
+  const totalIrrf = Math.round(compPayslips.reduce((sum, p) => sum + p.valorIrrf, 0) * 100) / 100;
+  const totalFgts = Math.round(compPayslips.reduce((sum, p) => sum + p.valorFgts, 0) * 100) / 100;
+
+  // Localizar contas analíticas padrão
+  const despesaSalariosAcc = accountsMap.get('3.2.01.01.001') || accounts.find(a => a.categoria === 'DESPESAS' && a.tipo === 'ANALITICA');
+  const salariosPagarAcc = accountsMap.get('2.1.02.01.001') || accounts.find(a => a.categoria === 'PASSIVO' && a.codigo.startsWith('2.1.02') && a.tipo === 'ANALITICA');
+  const inssRecolherAcc = accountsMap.get('2.1.02.02.001') || accounts.find(a => a.nome.toLowerCase().includes('inss') && a.tipo === 'ANALITICA') || salariosPagarAcc;
+  const fgtsRecolherAcc = accountsMap.get('2.1.02.03.001') || accounts.find(a => a.nome.toLowerCase().includes('fgts') && a.tipo === 'ANALITICA') || salariosPagarAcc;
+  const irrfRecolherAcc = accountsMap.get('2.1.03.05.001') || accountsMap.get('2.1.02.02.001') || salariosPagarAcc;
+
+  if (!despesaSalariosAcc || !salariosPagarAcc) {
+    return {
+      entries: [],
+      totalFolhaBruta: 0,
+      totalLiquido: 0,
+      totalInss: 0,
+      totalIrrf: 0,
+      totalFgts: 0,
+    };
+  }
+
+  const entries: AccountingEntry[] = [];
+  let currentNum = startEntryNumber;
+
+  // 1. Lançamento Composto de Apropriação de Salários e Retenções
+  const folhaLines: AccountingEntryLine[] = [
+    {
+      id: `payroll-line-${Date.now()}-1`,
+      contaCodigo: despesaSalariosAcc.codigo,
+      contaNome: despesaSalariosAcc.nome,
+      tipo: 'DEBITO',
+      valor: totalFolhaBruta,
+    },
+    {
+      id: `payroll-line-${Date.now()}-2`,
+      contaCodigo: salariosPagarAcc.codigo,
+      contaNome: salariosPagarAcc.nome,
+      tipo: 'CREDITO',
+      valor: totalLiquido,
+    },
+  ];
+
+  if (totalInss > 0 && inssRecolherAcc) {
+    folhaLines.push({
+      id: `payroll-line-${Date.now()}-3`,
+      contaCodigo: inssRecolherAcc.codigo,
+      contaNome: inssRecolherAcc.nome,
+      tipo: 'CREDITO',
+      valor: totalInss,
+    });
+  }
+
+  if (totalIrrf > 0 && irrfRecolherAcc) {
+    folhaLines.push({
+      id: `payroll-line-${Date.now()}-4`,
+      contaCodigo: irrfRecolherAcc.codigo,
+      contaNome: irrfRecolherAcc.nome,
+      tipo: 'CREDITO',
+      valor: totalIrrf,
+    });
+  }
+
+  // Outros descontos (ex: Vale transporte retido) para fechar perfeitamente D = C
+  const totalCreditosApropriados = Math.round(folhaLines.filter(l => l.tipo === 'CREDITO').reduce((sum, l) => sum + l.valor, 0) * 100) / 100;
+  const diferencaOutrosDescontos = Math.round((totalFolhaBruta - totalCreditosApropriados) * 100) / 100;
+
+  if (Math.abs(diferencaOutrosDescontos) > 0.01) {
+    folhaLines.push({
+      id: `payroll-line-${Date.now()}-5`,
+      contaCodigo: despesaSalariosAcc.codigo,
+      contaNome: 'Desc. Benefícios em Folha (VT/VR)',
+      tipo: 'CREDITO',
+      valor: Math.abs(diferencaOutrosDescontos),
+    });
+  }
+
+  const debitoFolha = Math.round(folhaLines.filter(l => l.tipo === 'DEBITO').reduce((sum, l) => sum + l.valor, 0) * 100) / 100;
+  const creditoFolha = Math.round(folhaLines.filter(l => l.tipo === 'CREDITO').reduce((sum, l) => sum + l.valor, 0) * 100) / 100;
+
+  entries.push({
+    id: `entry-payroll-salarios-${companyId}-${competencia.replace('/', '')}`,
+    companyId,
+    competencia,
+    numero: currentNum++,
+    data: new Date().toISOString().slice(0, 10),
+    origemTipo: 'FOLHA',
+    documentoRef: `Folha Salários ${competencia}`,
+    historicoPadrao: `Apropriação da Folha de Pagamento de Salários competência ${competencia}`,
+    linhas: folhaLines,
+    totalDebito: debitoFolha,
+    totalCredito: creditoFolha,
+    balanceado: Math.abs(debitoFolha - creditoFolha) < 0.05,
+    criadoEm: new Date().toISOString(),
+    criadoPor: 'Integração Folha DP ➔ Contabilidade',
+  });
+
+  // 2. Lançamento do FGTS Patronal do Mês
+  if (totalFgts > 0 && fgtsRecolherAcc) {
+    const fgtsLines: AccountingEntryLine[] = [
+      {
+        id: `fgts-line-${Date.now()}-1`,
+        contaCodigo: despesaSalariosAcc.codigo,
+        contaNome: 'Encargos FGTS sobre Folha de Pagamento',
+        tipo: 'DEBITO',
+        valor: totalFgts,
+      },
+      {
+        id: `fgts-line-${Date.now()}-2`,
+        contaCodigo: fgtsRecolherAcc.codigo,
+        contaNome: fgtsRecolherAcc.nome,
+        tipo: 'CREDITO',
+        valor: totalFgts,
+      },
+    ];
+
+    entries.push({
+      id: `entry-payroll-fgts-${companyId}-${competencia.replace('/', '')}`,
+      companyId,
+      competencia,
+      numero: currentNum++,
+      data: new Date().toISOString().slice(0, 10),
+      origemTipo: 'FOLHA',
+      documentoRef: `FGTS ${competencia}`,
+      historicoPadrao: `Provisão de FGTS 8% sobre folha de salários competência ${competencia}`,
+      linhas: fgtsLines,
+      totalDebito: totalFgts,
+      totalCredito: totalFgts,
+      balanceado: true,
+      criadoEm: new Date().toISOString(),
+      criadoPor: 'Integração Folha DP ➔ Contabilidade',
+    });
+  }
+
+  return {
+    entries,
+    totalFolhaBruta,
+    totalLiquido,
+    totalInss,
+    totalIrrf,
+    totalFgts,
+  };
+}
+
+/**
+ * Fase 2: Contabilização Automática da Distribuição de Lucros Isentos aos Sócios (Lei 9.249/95)
+ */
+export function autoJournalizeProfitDistribution(
+  companyId: string,
+  distribution: ProfitDistributionRecord,
+  accounts: AccountingAccount[],
+  entryNumber: number = 2050
+): AccountingEntry {
+  const accountsMap = new Map(accounts.map(a => [a.codigo, a]));
+
+  const lucrosAcumuladosAcc = accountsMap.get('2.3.02.01.001') || accounts.find(a => a.categoria === 'PATRIMONIO_LIQUIDO' && a.tipo === 'ANALITICA');
+  const bancoContaAcc = accountsMap.get('1.1.01.02.001') || accountsMap.get('1.1.01.01.001') || accounts.find(a => a.categoria === 'ATIVO' && a.tipo === 'ANALITICA');
+
+  const lines: AccountingEntryLine[] = [
+    {
+      id: `dist-line-${Date.now()}-1`,
+      contaCodigo: lucrosAcumuladosAcc?.codigo || '2.3.02.01.001',
+      contaNome: lucrosAcumuladosAcc?.nome || 'Lucros ou Prejuízos Acumulados',
+      tipo: 'DEBITO',
+      valor: distribution.valorDistribuido,
+    },
+    {
+      id: `dist-line-${Date.now()}-2`,
+      contaCodigo: bancoContaAcc?.codigo || '1.1.01.02.001',
+      contaNome: bancoContaAcc?.nome || 'Banco Conta Movimento',
+      tipo: 'CREDITO',
+      valor: distribution.valorDistribuido,
+    },
+  ];
+
+  return {
+    id: `entry-profit-dist-${distribution.id}`,
+    companyId,
+    competencia: distribution.competencia,
+    numero: entryNumber,
+    data: distribution.dataDistribuicao,
+    origemTipo: 'MANUAL',
+    documentoRef: distribution.reciboNumero,
+    historicoPadrao: `Distribuição de Lucros Isentos (${distribution.isencaoLegalArtigo}) a(o) sócio(a) ${distribution.partnerNome}`,
+    linhas: lines,
+    totalDebito: distribution.valorDistribuido,
+    totalCredito: distribution.valorDistribuido,
+    balanceado: true,
+    criadoEm: new Date().toISOString(),
+    criadoPor: 'Módulo de Distribuição de Lucros aos Sócios',
   };
 }

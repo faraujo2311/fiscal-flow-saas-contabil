@@ -9,9 +9,11 @@ import {
   ChevronDown,
   Bell,
   RotateCcw,
-  Database
+  Database,
+  Globe,
+  Shield
 } from 'lucide-react';
-import { Company, Competence, OfficeTenant } from '../types';
+import { Company, Competence, OfficeTenant, SystemCustomization, SystemUser } from '../types';
 
 interface HeaderProps {
   office: OfficeTenant;
@@ -23,6 +25,10 @@ interface HeaderProps {
   onSelectCompetence: (comp: string) => void;
   onToggleCompetenceStatus: () => void;
   onResetData?: () => void;
+  onOpenSupabase?: () => void;
+  customization?: SystemCustomization;
+  activeUser?: SystemUser;
+  onOpenLandingPage?: () => void;
 }
 
 export const Header: React.FC<HeaderProps> = ({
@@ -35,11 +41,18 @@ export const Header: React.FC<HeaderProps> = ({
   onSelectCompetence,
   onToggleCompetenceStatus,
   onResetData,
+  onOpenSupabase,
+  customization,
+  activeUser,
+  onOpenLandingPage,
 }) => {
   const currentCompObj = competences.find(
     c => c.companyId === selectedCompany.id && `${c.month < 10 ? '0' : ''}${c.month}/${c.year}` === selectedCompetence
   );
   const isCompetenceOpen = !currentCompObj || currentCompObj.status === 'ABERTA';
+
+  const officeDisplayName = customization?.officeDisplayName || office.name;
+  const crcDisplay = customization?.crc || office.crcResponsavel;
 
   return (
     <header className="bg-white border-b border-slate-200 text-slate-900 sticky top-0 z-40 px-6 py-2.5 shadow-xs">
@@ -52,7 +65,7 @@ export const Header: React.FC<HeaderProps> = ({
           <div>
             <div className="flex items-center gap-2">
               <span className="font-bold text-slate-800 text-sm tracking-tight">
-                {office.name}
+                {officeDisplayName}
               </span>
               <span 
                 className="text-[10px] bg-slate-100 text-slate-600 px-2 py-0.5 rounded-full border border-slate-200 font-bold uppercase tracking-wider"
@@ -60,9 +73,21 @@ export const Header: React.FC<HeaderProps> = ({
               >
                 Tenant: {office.id}
               </span>
+              {activeUser && (
+                <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full flex items-center gap-1 ${
+                  activeUser.role === 'ADMINISTRADOR'
+                    ? 'bg-blue-100 text-blue-800 border border-blue-200'
+                    : activeUser.role === 'ANALISTA'
+                    ? 'bg-emerald-100 text-emerald-800 border border-emerald-200'
+                    : 'bg-amber-100 text-amber-800 border border-amber-200'
+                }`}>
+                  <Shield className="w-2.5 h-2.5" />
+                  {activeUser.name.split(' ')[0]} ({activeUser.role})
+                </span>
+              )}
             </div>
             <div className="flex items-center gap-2 text-xs text-slate-500">
-              <span className="font-mono text-[11px]">{office.crcResponsavel}</span>
+              <span className="font-mono text-[11px]">{crcDisplay}</span>
               <span>•</span>
               <span className="flex items-center gap-1">
                 <UserCheck className="w-3 h-3 text-blue-600" />
@@ -157,6 +182,33 @@ export const Header: React.FC<HeaderProps> = ({
                 : 'Lucro Presumido'}
             </span>
           </div>
+
+          {/* Nuvem Supabase Badge / Button */}
+          {onOpenSupabase && (
+            <button
+              type="button"
+              onClick={onOpenSupabase}
+              title="Acessar painel e sincronização da Nuvem Supabase (PostgreSQL)"
+              className="flex items-center gap-1.5 px-2.5 py-1.5 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 text-emerald-800 rounded-lg text-xs font-semibold cursor-pointer transition-colors shadow-xs"
+            >
+              <Database className="w-3.5 h-3.5 text-emerald-600" />
+              <span className="text-[11px] font-bold">Supabase</span>
+              <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
+            </button>
+          )}
+
+          {/* Landing Page Button */}
+          {onOpenLandingPage && (
+            <button
+              type="button"
+              onClick={onOpenLandingPage}
+              title="Visualizar Landing Page Profissional do Sistema"
+              className="hidden sm:flex items-center gap-1.5 px-2.5 py-1.5 bg-indigo-50 hover:bg-indigo-100 border border-indigo-200 text-indigo-700 rounded-lg text-xs font-semibold cursor-pointer transition-colors shadow-xs"
+            >
+              <Globe className="w-3.5 h-3.5 text-indigo-600" />
+              <span className="text-[11px] font-bold">Landing Page</span>
+            </button>
+          )}
 
           {/* Persistência Local & Reset */}
           {onResetData && (
