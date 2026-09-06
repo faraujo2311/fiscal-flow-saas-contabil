@@ -9,6 +9,34 @@
     <meta property="og:description" content="Plataforma SaaS multi-tenant para escritórios de contabilidade com motor fiscal de XMLs, apuração de impostos, plano de contas com partidas dobradas, balancete, DRE, folha de pagamento e central de obrigações SPED/eSocial." />
     <meta property="og:type" content="website" />
     <meta name="twitter:card" content="summary_large_image" />
+    <script>
+      // Suprime exceções e rejeições não tratadas originadas por extensões externas de navegador (ex: MetaMask, Rabby, carteiras Web3)
+      window.addEventListener('unhandledrejection', function(event) {
+        var reason = event.reason ? (event.reason.message || String(event.reason)) : '';
+        if (
+          /MetaMask|metamask|ethereum|web3|chrome-extension|moz-extension/i.test(reason)
+        ) {
+          event.preventDefault();
+          if (event.stopImmediatePropagation) {
+            event.stopImmediatePropagation();
+          }
+        }
+      });
+
+      window.addEventListener('error', function(event) {
+        var msg = event.message || '';
+        var file = event.filename || '';
+        if (
+          /MetaMask|metamask|ethereum|web3/i.test(msg) ||
+          /chrome-extension|moz-extension/i.test(file)
+        ) {
+          event.preventDefault();
+          if (event.stopImmediatePropagation) {
+            event.stopImmediatePropagation();
+          }
+        }
+      }, true);
+    </script>
   </head>
   <body>
     <div id="root"></div>

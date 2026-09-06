@@ -12,7 +12,15 @@ import {
   Calendar,
   Eye,
   Download,
-  AlertTriangle
+  AlertTriangle,
+  Percent,
+  ShieldCheck,
+  Sparkles,
+  TrendingUp,
+  TrendingDown,
+  ArrowRight,
+  Sliders,
+  RefreshCw
 } from 'lucide-react';
 import { Company, FiscalDocument, TaxAssessment, TaxGuide } from '../types';
 import { calculateTaxAssessment } from '../services/taxEngine';
@@ -23,6 +31,7 @@ interface TaxAssessmentViewProps {
   documents: FiscalDocument[];
   currentAssessment?: TaxAssessment;
   onSaveAssessment: (assessment: TaxAssessment) => void;
+  onUpdateCompany?: (company: Company) => void;
 }
 
 export const TaxAssessmentView: React.FC<TaxAssessmentViewProps> = ({
@@ -31,15 +40,41 @@ export const TaxAssessmentView: React.FC<TaxAssessmentViewProps> = ({
   documents,
   currentAssessment,
   onSaveAssessment,
+  onUpdateCompany,
 }) => {
   const [selectedGuide, setSelectedGuide] = useState<TaxGuide | null>(null);
 
-  const handleRunAssessment = () => {
-    const assessment = calculateTaxAssessment(company, competencia, documents);
+  // Simulador de Pró-labore e Fator R
+  const [isSimulatorOpen, setIsSimulatorOpen] = useState(false);
+  const [simFolha12, setSimFolha12] = useState<number>(company.folha12Meses || 0);
+
+  const handleRunAssessment = (overrideCompany?: Company) => {
+    const compToUse = overrideCompany && 'regimeTributario' in overrideCompany ? overrideCompany : company;
+    const assessment = calculateTaxAssessment(compToUse, competencia, documents);
     onSaveAssessment(assessment);
   };
 
+  const handleApplySimulatedFolha = () => {
+    const updatedCompany: Company = {
+      ...company,
+      folha12Meses: simFolha12,
+    };
+    if (onUpdateCompany) {
+      onUpdateCompany(updatedCompany);
+    }
+    handleRunAssessment(updatedCompany);
+    setIsSimulatorOpen(false);
+  };
+
   const isSimples = company.regimeTributario === 'SIMPLES_NACIONAL';
+
+  // Cálculos do simulador
+  const simRatio = company.rbt12 > 0 ? simFolha12 / company.rbt12 : 0;
+  const simPercent = Math.round(simRatio * 10000) / 100;
+  const simAtingiu28 = simPercent >= 28.0;
+  const simAnexo = simAtingiu28 ? 'ANEXO_III' : 'ANEXO_V';
+  const valorMinimoPara28 = Math.round(company.rbt12 * 0.28 * 100) / 100;
+  const deficitPara28 = Math.max(0, valorMinimoPara28 - simFolha12);
 
   return (
     <div className="space-y-6">
@@ -63,7 +98,7 @@ export const TaxAssessmentView: React.FC<TaxAssessmentViewProps> = ({
         <button
           type="button"
           id="btn-run-assessment"
-          onClick={handleRunAssessment}
+          onClick={() => handleRunAssessment()}
           className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-xs font-semibold flex items-center gap-2 shadow-xs shadow-blue-200 transition-colors cursor-pointer"
         >
           <Calculator className="w-4 h-4" />
@@ -84,7 +119,7 @@ export const TaxAssessmentView: React.FC<TaxAssessmentViewProps> = ({
           </p>
           <button
             type="button"
-            onClick={handleRunAssessment}
+            onClick={() => handleRunAssessment()}
             className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-xs font-semibold inline-flex items-center gap-2 shadow-xs shadow-blue-200 transition-colors cursor-pointer"
           >
             <Calculator className="w-4 h-4" />
@@ -147,6 +182,217 @@ export const TaxAssessmentView: React.FC<TaxAssessmentViewProps> = ({
                   Alíquota Efetiva: {currentAssessment.simples.aliquotaEfetiva}%
                 </span>
               </div>
+
+              {/* Fator R (Art. 18, §§ 5º-J e 5º-M da LC 123/2006) */}
+              {currentAssessment.simples.fatorR && (
+                <div className={`p-5 rounded-xl border ${
+                  currentAssessment.simples.fatorR.atingiuLimite28
+                    ? 'bg-emerald-50/60 border-emerald-200 text-emerald-950'
+                    : 'bg-amber-50/60 border-amber-200 text-amber-950'
+                } space-y-4`}>
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-200/50 pb-3">
+                    <div className="flex items-center gap-2.5">
+                      <div className={`w-8 h-8 rounded-lg flex items-center justify-center font-bold text-xs ${
+                        currentAssessment.simples.fatorR.atingiuLimite28 
+                          ? 'bg-emerald-600 text-white' 
+                          : 'bg-amber-600 text-white'
+                      }`}>
+                        %R
+                      </div>
+                      <div>
+                        <div className="flex items-center gap-2">
+                          <span className="text-xs font-bold uppercase tracking-wider text-slate-900">
+                            Análise do Fator R • LC 123/2006
+                          </span>
+                          <span className="text-[10px] font-semibold bg-white/80 border border-slate-200 px-2 py-0.5 rounded text-slate-600">
+                            Art. 18, §§ 5º-J / 5º-M
+                          </span>
+                        </div>
+                        <div className="text-[11px] text-slate-600 mt-0.5">
+                          Razão oficial entre Folha de Salários / Pró-labore (FS12) e Faturamento Bruto (RBT12)
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="flex items-center gap-2">
+                      <span className="text-xs font-mono font-bold px-2.5 py-1 rounded-md bg-white border border-slate-200 text-slate-900 shadow-2xs">
+                        Fator R: {currentAssessment.simples.fatorR.fatorPercentual.toFixed(2)}%
+                      </span>
+                      <span className={`px-2.5 py-1 rounded-full text-[11px] font-bold flex items-center gap-1 ${
+                        currentAssessment.simples.fatorR.atingiuLimite28
+                          ? 'bg-emerald-100 text-emerald-800'
+                          : 'bg-amber-100 text-amber-800'
+                      }`}>
+                        {currentAssessment.simples.fatorR.atingiuLimite28 ? (
+                          <>
+                            <ShieldCheck className="w-3.5 h-3.5" />
+                            Anexo III Assegurado (a partir de 6%)
+                          </>
+                        ) : (
+                          <>
+                            <AlertTriangle className="w-3.5 h-3.5" />
+                            Enquadrado no Anexo V (a partir de 15,5%)
+                          </>
+                        )}
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => setIsSimulatorOpen(!isSimulatorOpen)}
+                        className="px-3 py-1 bg-white hover:bg-slate-50 border border-slate-300 text-slate-700 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-colors cursor-pointer shadow-2xs"
+                      >
+                        <Sliders className="w-3.5 h-3.5 text-blue-600" />
+                        {isSimulatorOpen ? 'Fechar Simulador' : 'Simulador Pró-labore'}
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Barra Visual de Progresso até a Meta de 28% */}
+                  <div className="space-y-1.5">
+                    <div className="flex items-center justify-between text-[11px] font-semibold text-slate-700">
+                      <span>Evolução do Índice: <strong className="font-mono">{currentAssessment.simples.fatorR.fatorPercentual.toFixed(2)}%</strong></span>
+                      <span>Meta Legal para Anexo III: <strong className="font-mono text-blue-700">28,00%</strong></span>
+                    </div>
+                    <div className="relative w-full h-3 bg-slate-200/80 rounded-full overflow-hidden">
+                      <div 
+                        className={`h-full transition-all duration-500 rounded-full ${
+                          currentAssessment.simples.fatorR.atingiuLimite28 
+                            ? 'bg-emerald-500' 
+                            : 'bg-amber-500'
+                        }`}
+                        style={{ width: `${Math.min(100, (currentAssessment.simples.fatorR.fatorPercentual / 40) * 100)}%` }}
+                      />
+                      {/* Marcador dos 28% (28 / 40 = 70% da barra) */}
+                      <div 
+                        className="absolute top-0 bottom-0 w-0.5 bg-slate-900 z-10"
+                        style={{ left: '70%' }}
+                        title="Marco dos 28%"
+                      />
+                    </div>
+                    <div className="flex justify-between text-[10px] text-slate-500 font-mono">
+                      <span>0%</span>
+                      <span className="text-slate-800 font-bold" style={{ marginLeft: '65%' }}>28% (Meta)</span>
+                      <span>40%+</span>
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 text-xs">
+                    <div className="bg-white/80 p-3 rounded-xl border border-slate-200/60">
+                      <div className="text-[10px] text-slate-500 font-semibold uppercase">Folha de Salários + Pró-labore (12M)</div>
+                      <div className="font-mono font-bold text-slate-900 mt-0.5 text-sm">
+                        {currentAssessment.simples.fatorR.folha12Meses.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
+                      </div>
+                      <div className="text-[10px] text-slate-500 mt-1">
+                        Inclui encargos previdenciários patronais
+                      </div>
+                    </div>
+
+                    <div className="bg-white/80 p-3 rounded-xl border border-slate-200/60">
+                      <div className="text-[10px] text-slate-500 font-semibold uppercase">Receita Bruta Acumulada (RBT12)</div>
+                      <div className="font-mono font-bold text-slate-900 mt-0.5 text-sm">
+                        {currentAssessment.simples.fatorR.rbt12.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
+                      </div>
+                      <div className="text-[10px] text-slate-500 mt-1">
+                        Base para determinação da alíquota
+                      </div>
+                    </div>
+
+                    <div className="bg-white/80 p-3 rounded-xl border border-slate-200/60">
+                      <div className="text-[10px] text-slate-500 font-semibold uppercase">Parecer do Planejamento Tributário</div>
+                      <div className="font-medium text-slate-800 mt-0.5 text-[11px] leading-relaxed">
+                        {currentAssessment.simples.fatorR.recomendacao}
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* PAINEL INTERATIVO DE SIMULAÇÃO DE CENÁRIOS */}
+                  {isSimulatorOpen && (
+                    <div className="mt-4 p-4 bg-white border-2 border-blue-200 rounded-xl shadow-xs space-y-4">
+                      <div className="flex items-center justify-between border-b border-slate-100 pb-2.5">
+                        <div className="flex items-center gap-2">
+                          <Sliders className="w-4 h-4 text-blue-600" />
+                          <h4 className="text-xs font-bold text-slate-900 uppercase tracking-wide">
+                            Simulador de Otimização Pró-labore vs Economia no DAS
+                          </h4>
+                        </div>
+                        <span className="text-[10px] bg-blue-50 text-blue-700 font-bold px-2 py-0.5 rounded border border-blue-100">
+                          Ferramenta de Estratégia Contábil
+                        </span>
+                      </div>
+
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-xs">
+                        <div>
+                          <label className="block text-slate-700 font-semibold mb-1">
+                            Simular Nova Folha / Pró-labore Acumulado (12 Meses):
+                          </label>
+                          <div className="flex items-center gap-2">
+                            <input
+                              type="number"
+                              step="1000"
+                              value={simFolha12}
+                              onChange={(e) => setSimFolha12(Math.max(0, parseFloat(e.target.value) || 0))}
+                              className="w-full px-3 py-2 border border-slate-300 rounded-lg font-mono text-slate-800 text-xs focus:outline-none focus:border-blue-500"
+                            />
+                            {deficitPara28 > 0 && (
+                              <button
+                                type="button"
+                                onClick={() => setSimFolha12(valorMinimoPara28)}
+                                className="px-2.5 py-2 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-200 rounded-lg text-[11px] font-bold whitespace-nowrap cursor-pointer transition-colors"
+                                title="Ajustar automaticamente para atingir exatamente 28%"
+                              >
+                                Fixar 28% (+R$ {deficitPara28.toLocaleString('pt-BR', { maximumFractionDigits: 0 })})
+                              </button>
+                            )}
+                          </div>
+                          <p className="text-[10px] text-slate-500 mt-1">
+                            Aumento no pró-labore dos sócios eleva o Fator R e pode reduzir a alíquota de 15,5% para 6,0%.
+                          </p>
+                        </div>
+
+                        <div className="bg-slate-50 p-3 rounded-xl border border-slate-200 space-y-2">
+                          <div className="flex justify-between items-center text-xs">
+                            <span className="text-slate-600">Fator R Projetado:</span>
+                            <span className={`font-mono font-bold ${simAtingiu28 ? 'text-emerald-700' : 'text-amber-700'}`}>
+                              {simPercent.toFixed(2)}%
+                            </span>
+                          </div>
+                          <div className="flex justify-between items-center text-xs">
+                            <span className="text-slate-600">Anexo Projetado:</span>
+                            <span className={`font-bold px-2 py-0.5 rounded text-[10px] ${
+                              simAtingiu28 ? 'bg-emerald-100 text-emerald-800' : 'bg-amber-100 text-amber-800'
+                            }`}>
+                              {simAnexo === 'ANEXO_III' ? 'Anexo III (Alíquotas reduzidas)' : 'Anexo V (Alíquotas majoradas)'}
+                            </span>
+                          </div>
+                          <div className="flex justify-between items-center text-xs pt-1 border-t border-slate-200">
+                            <span className="text-slate-600">Deficit para meta (28%):</span>
+                            <span className="font-mono font-bold text-slate-800">
+                              {deficitPara28 === 0 ? 'Meta atingida!' : deficitPara28.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
+                            </span>
+                          </div>
+                        </div>
+                      </div>
+
+                      <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-100">
+                        <button
+                          type="button"
+                          onClick={() => setSimFolha12(company.folha12Meses || 0)}
+                          className="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg text-xs font-semibold cursor-pointer transition-colors"
+                        >
+                          Restaurar Original
+                        </button>
+                        <button
+                          type="button"
+                          onClick={handleApplySimulatedFolha}
+                          className="px-3.5 py-1.5 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-xs font-semibold flex items-center gap-1.5 shadow-xs shadow-blue-200 cursor-pointer transition-colors"
+                        >
+                          <RefreshCw className="w-3.5 h-3.5" />
+                          Salvar Folha e Reprocessar DAS
+                        </button>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
 
               {/* Fórmula Visual */}
               <div className="p-4 bg-slate-50 border border-slate-200 rounded-xl text-xs font-mono text-slate-700">

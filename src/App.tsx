@@ -242,6 +242,11 @@ export default function App() {
     showToast(`Conta ${acc.codigo} - ${acc.nome} adicionada ao plano de contas.`);
   };
 
+  const handleUpdateCompany = (updatedCompany: Company) => {
+    setCompanies(prev => prev.map(c => c.id === updatedCompany.id ? updatedCompany : c));
+    showToast(`Dados fiscais da empresa ${updatedCompany.nomeFantasia || updatedCompany.razaoSocial} atualizados.`);
+  };
+
   // 8. Folha de Pagamento
   const handleAddEmployee = (emp: Employee) => {
     setEmployees(prev => [emp, ...prev]);
@@ -355,6 +360,7 @@ export default function App() {
               documents={documents}
               currentAssessment={currentAssessment}
               onSaveAssessment={handleSaveAssessment}
+              onUpdateCompany={handleUpdateCompany}
             />
           )}
 

@@ -24,6 +24,8 @@ export interface Company {
   atividadePrincipal: string;
   anexoSimples?: 'ANEXO_I' | 'ANEXO_II' | 'ANEXO_III' | 'ANEXO_IV' | 'ANEXO_V';
   rbt12: number; // Receita Bruta Acumulada 12 meses
+  sujeitoFatorR?: boolean; // Se a atividade permite/exige aplicação do Fator R
+  folha12Meses?: number; // Total de gastos com folha e encargos nos últimos 12 meses
   ativo: boolean;
 }
 
@@ -152,6 +154,16 @@ export interface TaxAssessment {
       icms: number;
       iss: number;
     };
+    fatorR?: {
+      sujeitoFatorR: boolean;
+      folha12Meses: number;
+      rbt12: number;
+      fatorPercentual: number; // ex: 30%
+      atingiuLimite28: boolean; // se >= 28%
+      anexoAplicado: string;
+      economiaMensalEstimada?: number;
+      recomendacao: string;
+    };
   };
   
   // Lucro Presumido / Real
@@ -229,7 +241,7 @@ export interface AccountingEntry {
   competencia: string;
   numero: number;
   data: string;
-  origemTipo: 'MANUAL' | 'FISCAL' | 'FOLHA';
+  origemTipo: 'MANUAL' | 'FISCAL' | 'FOLHA' | 'ENCERRAMENTO';
   origemId?: string;
   documentoRef?: string;
   historicoPadrao: string;
@@ -239,6 +251,59 @@ export interface AccountingEntry {
   balanceado: boolean;
   criadoEm: string;
   criadoPor: string;
+}
+
+// Relatório do Balanço Patrimonial Oficial
+export interface BalanceSheetItem {
+  codigo: string;
+  nome: string;
+  saldo: number;
+  tipo: 'SINTETICA' | 'ANALITICA';
+  nivel: number;
+}
+
+export interface BalanceSheetReport {
+  ativoCirculante: BalanceSheetItem[];
+  subtotalAtivoCirculante: number;
+  ativoNaoCirculante: BalanceSheetItem[];
+  subtotalAtivoNaoCirculante: number;
+  totalAtivo: number;
+  
+  passivoCirculante: BalanceSheetItem[];
+  subtotalPassivoCirculante: number;
+  passivoNaoCirculante: BalanceSheetItem[];
+  subtotalPassivoNaoCirculante: number;
+  patrimonioLiquido: BalanceSheetItem[];
+  subtotalPatrimonioLiquido: number;
+  totalPassivoEPatrimonioLiquido: number;
+  
+  equilibrado: boolean;
+  diferenca: number;
+  resultadoExercicioApurado: number;
+}
+
+// Relatório do Livro Razão Analítico
+export interface GeneralLedgerLine {
+  data: string;
+  entryId: string;
+  entryNumero: number;
+  origemTipo: string;
+  documentoRef?: string;
+  historico: string;
+  debito: number;
+  credito: number;
+  saldoResultante: number;
+}
+
+export interface GeneralLedgerReport {
+  contaCodigo: string;
+  contaNome: string;
+  natureza: 'DEVEDORA' | 'CREDORA';
+  saldoInicial: number;
+  totalDebitos: number;
+  totalCreditos: number;
+  saldoFinal: number;
+  linhas: GeneralLedgerLine[];
 }
 
 export interface PostingRule {
@@ -314,6 +379,7 @@ export interface TaxObligation {
   competencia: string;
   status: 'PENDENTE' | 'GERADO' | 'VALIDADO' | 'TRANSMITIDO' | 'ATRASADO';
   protocoloRecibo?: string;
+  protocolo?: string;
   dataTransmissao?: string;
 }
 

@@ -3,7 +3,11 @@ import {
   AccountingEntry, 
   AccountingEntryLine, 
   FiscalDocument, 
-  PostingRule 
+  PostingRule,
+  BalanceSheetReport,
+  BalanceSheetItem,
+  GeneralLedgerReport,
+  GeneralLedgerLine
 } from '../types';
 
 export interface TrialBalanceRow {
@@ -278,5 +282,338 @@ export function generateDreStatement(
     receitaLiquida,
     lucroBruto,
     lucroLiquido,
+  };
+}
+
+/**
+ * Gera o Balanço Patrimonial Oficial da Empresa
+ * Estrutura: Ativo (Circulante e Não Circulante) vs Passivo (Circulante, Não Circulante e PL)
+ */
+export function generateBalanceSheet(
+  accounts: AccountingAccount[],
+  entries: AccountingEntry[]
+): BalanceSheetReport {
+  const trial = generateTrialBalance(accounts, entries);
+  const rowMap = new Map(trial.rows.map(r => [r.codigo, r]));
+
+  // Ativo Circulante (1.1)
+  const ativoCirculanteRows = trial.rows.filter(r => r.codigo.startsWith('1.1') && r.codigo !== '1.1');
+  const ativoCirculante: BalanceSheetItem[] = ativoCirculanteRows.map(r => ({
+    codigo: r.codigo,
+    nome: r.nome,
+    saldo: r.saldoAtual,
+    tipo: r.tipo,
+    nivel: r.nivel,
+  }));
+
+  // Ativo Não Circulante (1.2)
+  const ativoNaoCirculanteRows = trial.rows.filter(r => r.codigo.startsWith('1.2') && r.codigo !== '1.2');
+  const ativoNaoCirculante: BalanceSheetItem[] = ativoNaoCirculanteRows.map(r => ({
+    codigo: r.codigo,
+    nome: r.nome,
+    saldo: r.saldoAtual,
+    tipo: r.tipo,
+    nivel: r.nivel,
+  }));
+
+  // Subtotais do Ativo
+  const subtotalAtivoCirculante = rowMap.get('1.1')?.saldoAtual || 
+    ativoCirculante.filter(i => i.tipo === 'ANALITICA').reduce((acc, curr) => acc + curr.saldo, 0);
+
+  const subtotalAtivoNaoCirculante = rowMap.get('1.2')?.saldoAtual || 
+    ativoNaoCirculante.filter(i => i.tipo === 'ANALITICA').reduce((acc, curr) => acc + curr.saldo, 0);
+
+  const totalAtivo = Math.round((subtotalAtivoCirculante + subtotalAtivoNaoCirculante) * 100) / 100;
+
+  // Passivo Circulante (2.1)
+  const passivoCirculanteRows = trial.rows.filter(r => r.codigo.startsWith('2.1') && r.codigo !== '2.1');
+  const passivoCirculante: BalanceSheetItem[] = passivoCirculanteRows.map(r => ({
+    codigo: r.codigo,
+    nome: r.nome,
+    saldo: r.saldoAtual,
+    tipo: r.tipo,
+    nivel: r.nivel,
+  }));
+  const subtotalPassivoCirculante = rowMap.get('2.1')?.saldoAtual || 
+    passivoCirculante.filter(i => i.tipo === 'ANALITICA').reduce((acc, curr) => acc + curr.saldo, 0);
+
+  // Passivo Não Circulante (2.2)
+  const passivoNaoCirculanteRows = trial.rows.filter(r => r.codigo.startsWith('2.2') && r.codigo !== '2.2');
+  const passivoNaoCirculante: BalanceSheetItem[] = passivoNaoCirculanteRows.map(r => ({
+    codigo: r.codigo,
+    nome: r.nome,
+    saldo: r.saldoAtual,
+    tipo: r.tipo,
+    nivel: r.nivel,
+  }));
+  const subtotalPassivoNaoCirculante = rowMap.get('2.2')?.saldoAtual || 0;
+
+  // Patrimônio Líquido (2.3)
+  const dre = generateDreStatement(accounts, entries);
+  const resultadoExercicioApurado = dre.lucroLiquido;
+
+  // Verifica se já houve lançamento de encerramento
+  const hasClosingEntry = entries.some(e => e.origemTipo === 'ENCERRAMENTO');
+
+  const plRows = trial.rows.filter(r => r.codigo.startsWith('2.3') && r.codigo !== '2.3');
+  const patrimonioLiquido: BalanceSheetItem[] = plRows.map(r => ({
+    codigo: r.codigo,
+    nome: r.nome,
+    saldo: r.saldoAtual,
+    tipo: r.tipo,
+    nivel: r.nivel,
+  }));
+
+  // Se não foi feito o encerramento do exercício, incorpora a linha do resultado do exercício em curso
+  if (!hasClosingEntry) {
+    patrimonioLiquido.push({
+      codigo: '2.3.03.01.001',
+      nome: 'Resultado Líquido do Período em Curso (DRE)',
+      saldo: resultadoExercicioApurado,
+      tipo: 'ANALITICA',
+      nivel: 4,
+    });
+  }
+
+  const plAnaliticasSoma = plRows.filter(i => i.tipo === 'ANALITICA').reduce((acc, curr) => acc + curr.saldoAtual, 0);
+  const subtotalPatrimonioLiquido = Math.round((plAnaliticasSoma + (hasClosingEntry ? 0 : resultadoExercicioApurado)) * 100) / 100;
+
+  const totalPassivoEPatrimonioLiquido = Math.round(
+    (subtotalPassivoCirculante + subtotalPassivoNaoCirculante + subtotalPatrimonioLiquido) * 100
+  ) / 100;
+
+  const diferenca = Math.abs(Math.round((totalAtivo - totalPassivoEPatrimonioLiquido) * 100) / 100);
+  const equilibrado = diferenca < 0.05;
+
+  return {
+    ativoCirculante,
+    subtotalAtivoCirculante,
+    ativoNaoCirculante,
+    subtotalAtivoNaoCirculante,
+    totalAtivo,
+    passivoCirculante,
+    subtotalPassivoCirculante,
+    passivoNaoCirculante,
+    subtotalPassivoNaoCirculante,
+    patrimonioLiquido,
+    subtotalPatrimonioLiquido,
+    totalPassivoEPatrimonioLiquido,
+    equilibrado,
+    diferenca,
+    resultadoExercicioApurado,
+  };
+}
+
+/**
+ * Gera o Livro Razão Analítico (Extrato / Razonete) para uma conta contábil específica
+ */
+export function generateGeneralLedger(
+  accountCode: string,
+  accounts: AccountingAccount[],
+  entries: AccountingEntry[]
+): GeneralLedgerReport {
+  const account = accounts.find(a => a.codigo === accountCode) || accounts[0];
+  const saldoInicial = account ? account.saldoInicial : 0;
+  const natureza = account ? account.natureza : 'DEVEDORA';
+
+  const matchingEntries = entries
+    .filter(e => e.balanceado && e.linhas.some(l => l.contaCodigo === accountCode))
+    .sort((a, b) => new Date(a.data).getTime() - new Date(b.data).getTime());
+
+  let saldoAcumulado = saldoInicial;
+  let totalDebitos = 0;
+  let totalCreditos = 0;
+
+  const linhas: GeneralLedgerLine[] = [];
+
+  for (const entry of matchingEntries) {
+    const relevantLines = entry.linhas.filter(l => l.contaCodigo === accountCode);
+    for (const line of relevantLines) {
+      const debito = line.tipo === 'DEBITO' ? line.valor : 0;
+      const credito = line.tipo === 'CREDITO' ? line.valor : 0;
+
+      totalDebitos += debito;
+      totalCreditos += credito;
+
+      if (natureza === 'DEVEDORA') {
+        saldoAcumulado = saldoAcumulado + debito - credito;
+      } else {
+        saldoAcumulado = saldoAcumulado + credito - debito;
+      }
+
+      linhas.push({
+        data: entry.data,
+        entryId: entry.id,
+        entryNumero: entry.numero,
+        origemTipo: entry.origemTipo,
+        documentoRef: entry.documentoRef,
+        historico: entry.historicoPadrao,
+        debito: Math.round(debito * 100) / 100,
+        credito: Math.round(credito * 100) / 100,
+        saldoResultante: Math.round(saldoAcumulado * 100) / 100,
+      });
+    }
+  }
+
+  return {
+    contaCodigo: account ? account.codigo : accountCode,
+    contaNome: account ? account.nome : 'Conta Contábil',
+    natureza,
+    saldoInicial: Math.round(saldoInicial * 100) / 100,
+    totalDebitos: Math.round(totalDebitos * 100) / 100,
+    totalCreditos: Math.round(totalCreditos * 100) / 100,
+    saldoFinal: Math.round(saldoAcumulado * 100) / 100,
+    linhas,
+  };
+}
+
+/**
+ * Gera o Lançamento de Apuração do Resultado do Exercício (ARE)
+ * Encerra todas as contas de receitas e despesas e transfere o resultado para Lucros/Prejuízos Acumulados
+ */
+export function generateClosingEntries(
+  companyId: string,
+  competencia: string,
+  accounts: AccountingAccount[],
+  entries: AccountingEntry[]
+): {
+  closingEntry: AccountingEntry | null;
+  totalReceitas: number;
+  totalDespesas: number;
+  resultadoLiquido: number;
+} {
+  const trial = generateTrialBalance(accounts, entries);
+  const accountsMap = new Map(accounts.map(a => [a.codigo, a]));
+
+  // Contas analíticas de Receitas com saldo (Grupo 4)
+  const receitasRows = trial.rows.filter(r => r.codigo.startsWith('4.') && r.tipo === 'ANALITICA' && r.saldoAtual > 0);
+  // Contas analíticas de Despesas/Custos com saldo (Grupo 3, excluindo ARE 3.9)
+  const despesasRows = trial.rows.filter(r => r.codigo.startsWith('3.') && !r.codigo.startsWith('3.9') && r.tipo === 'ANALITICA' && r.saldoAtual > 0);
+
+  const totalReceitas = Math.round(receitasRows.reduce((acc, curr) => acc + curr.saldoAtual, 0) * 100) / 100;
+  const totalDespesas = Math.round(despesasRows.reduce((acc, curr) => acc + curr.saldoAtual, 0) * 100) / 100;
+  const resultadoLiquido = Math.round((totalReceitas - totalDespesas) * 100) / 100;
+
+  if (totalReceitas === 0 && totalDespesas === 0) {
+    return { closingEntry: null, totalReceitas: 0, totalDespesas: 0, resultadoLiquido: 0 };
+  }
+
+  const areAcc = accounts.find(a => a.codigo.startsWith('3.9')) || {
+    codigo: '3.9.01.01.001',
+    nome: 'Resultado do Exercício em Apuração (ARE)',
+  };
+
+  const plDestinoAcc = accounts.find(a => a.codigo === '2.3.02.01.001') || {
+    codigo: '2.3.02.01.001',
+    nome: 'Lucros ou Prejuízos Acumulados',
+  };
+
+  const lines: AccountingEntryLine[] = [];
+  let lineIndex = 1;
+
+  // 1. Zera contas de Receita (Debita Receita, Credita ARE)
+  for (const r of receitasRows) {
+    lines.push({
+      id: `closing-rec-${lineIndex++}`,
+      contaCodigo: r.codigo,
+      contaNome: r.nome,
+      tipo: 'DEBITO',
+      valor: r.saldoAtual,
+    });
+  }
+
+  if (totalReceitas > 0) {
+    lines.push({
+      id: `closing-are-rec`,
+      contaCodigo: areAcc.codigo,
+      contaNome: areAcc.nome,
+      tipo: 'CREDITO',
+      valor: totalReceitas,
+    });
+  }
+
+  // 2. Zera contas de Despesas (Credita Despesa, Debita ARE)
+  if (totalDespesas > 0) {
+    lines.push({
+      id: `closing-are-desp`,
+      contaCodigo: areAcc.codigo,
+      contaNome: areAcc.nome,
+      tipo: 'DEBITO',
+      valor: totalDespesas,
+    });
+  }
+
+  for (const d of despesasRows) {
+    lines.push({
+      id: `closing-desp-${lineIndex++}`,
+      contaCodigo: d.codigo,
+      contaNome: d.nome,
+      tipo: 'CREDITO',
+      valor: d.saldoAtual,
+    });
+  }
+
+  // 3. Transfere saldo do ARE para o PL (Lucros ou Prejuízos Acumulados)
+  if (resultadoLiquido > 0) {
+    // Lucro Líquido
+    lines.push({
+      id: `closing-dest-are`,
+      contaCodigo: areAcc.codigo,
+      contaNome: areAcc.nome,
+      tipo: 'DEBITO',
+      valor: resultadoLiquido,
+    });
+    lines.push({
+      id: `closing-dest-pl`,
+      contaCodigo: plDestinoAcc.codigo,
+      contaNome: plDestinoAcc.nome,
+      tipo: 'CREDITO',
+      valor: resultadoLiquido,
+    });
+  } else if (resultadoLiquido < 0) {
+    // Prejuízo Líquido
+    const prejuizoAbs = Math.abs(resultadoLiquido);
+    lines.push({
+      id: `closing-dest-pl`,
+      contaCodigo: plDestinoAcc.codigo,
+      contaNome: plDestinoAcc.nome,
+      tipo: 'DEBITO',
+      valor: prejuizoAbs,
+    });
+    lines.push({
+      id: `closing-dest-are`,
+      contaCodigo: areAcc.codigo,
+      contaNome: areAcc.nome,
+      tipo: 'CREDITO',
+      valor: prejuizoAbs,
+    });
+  }
+
+  const nextNumber = entries.length > 0 ? Math.max(...entries.map(e => e.numero)) + 1 : 9999;
+  const totalDebitos = Math.round(lines.filter(l => l.tipo === 'DEBITO').reduce((sum, l) => sum + l.valor, 0) * 100) / 100;
+  const totalCreditos = Math.round(lines.filter(l => l.tipo === 'CREDITO').reduce((sum, l) => sum + l.valor, 0) * 100) / 100;
+
+  const closingEntry: AccountingEntry = {
+    id: `entry-closing-${companyId}-${competencia.replace('/', '')}`,
+    companyId,
+    competencia,
+    numero: nextNumber,
+    data: new Date().toISOString().slice(0, 10),
+    origemTipo: 'ENCERRAMENTO',
+    documentoRef: `ARE - ${competencia}`,
+    historicoPadrao: `Encerramento do Exercício / Apuração do Resultado do Período (${competencia})`,
+    linhas: lines,
+    totalDebito: totalDebitos,
+    totalCredito: totalCreditos,
+    balanceado: Math.abs(totalDebitos - totalCreditos) < 0.05,
+    criadoEm: new Date().toISOString(),
+    criadoPor: 'Módulo de Encerramento Contábil Automatizado',
+  };
+
+  return {
+    closingEntry,
+    totalReceitas,
+    totalDespesas,
+    resultadoLiquido,
   };
 }

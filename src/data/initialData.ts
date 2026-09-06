@@ -53,6 +53,8 @@ export const initialCompanies: Company[] = [
     atividadePrincipal: 'Desenvolvimento e Licenciamento de Software SaaS',
     anexoSimples: 'ANEXO_III',
     rbt12: 1250000.00,
+    sujeitoFatorR: true,
+    folha12Meses: 375000.00, // 30% do RBT12 -> Enquadra no Anexo III (alíquotas a partir de 6%)
     ativo: true,
   },
   {
@@ -153,6 +155,7 @@ export const initialChartOfAccounts: AccountingAccount[] = [
   { id: 'acc-31', companyId: 'comp-1', codigo: '3.2.01.01.001', codigoReduzido: '311', nome: 'Salários e Encargos Sociais do Pessoal', tipo: 'ANALITICA', natureza: 'DEVEDORA', categoria: 'DESPESAS', nivel: 4, saldoInicial: 0, saldoAtual: 78400, codigoReferencialECD: '3.02.01.01.01' },
   { id: 'acc-32', companyId: 'comp-1', codigo: '3.2.02.01.001', codigoReduzido: '321', nome: 'Despesas com Aluguel e Instalações', tipo: 'ANALITICA', natureza: 'DEVEDORA', categoria: 'DESPESAS', nivel: 4, saldoInicial: 0, saldoAtual: 18000, codigoReferencialECD: '3.02.01.02.01' },
   { id: 'acc-33', companyId: 'comp-1', codigo: '3.2.03.01.001', codigoReduzido: '331', nome: 'Impostos e Contribuições Incidentes s/ Vendas', tipo: 'ANALITICA', natureza: 'DEVEDORA', categoria: 'DESPESAS', nivel: 4, saldoInicial: 0, saldoAtual: 31000, codigoReferencialECD: '3.02.02.01.01' },
+  { id: 'acc-are', companyId: 'comp-1', codigo: '3.9.01.01.001', codigoReduzido: '399', nome: 'Resultado do Exercício em Apuração (ARE)', tipo: 'ANALITICA', natureza: 'CREDORA', categoria: 'DESPESAS', nivel: 4, saldoInicial: 0, saldoAtual: 0, codigoReferencialECD: '3.09.01.01.01' },
 
   // 4. RECEITAS
   { id: 'acc-34', companyId: 'comp-1', codigo: '4', codigoReduzido: '4', nome: 'RECEITAS OPERACIONAIS', tipo: 'SINTETICA', natureza: 'CREDORA', categoria: 'RECEITAS', nivel: 1, saldoInicial: 0, saldoAtual: 452400, codigoReferencialECD: '4' },

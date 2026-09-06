@@ -26,7 +26,7 @@ const TABELA_ANEXO_I: SimplesFaixa[] = [
   { limiteSuperior: 4800000, aliquotaNominal: 0.190, parcelaDeduzir: 378000, partilha: { irpj: 0.135, csll: 0.100, cofins: 0.2827, pis: 0.0613, cpp: 0.4210 } }, // Acima de 3.6m ICMS é por fora
 ];
 
-// Anexo III - Serviços (Desenvolvimento de Software, Consultorias)
+// Anexo III - Serviços (Desenvolvimento de Software, Consultorias com Fator R >= 28%)
 const TABELA_ANEXO_III: SimplesFaixa[] = [
   { limiteSuperior: 180000, aliquotaNominal: 0.060, parcelaDeduzir: 0, partilha: { irpj: 0.040, csll: 0.035, cofins: 0.1282, pis: 0.0278, cpp: 0.4340, iss: 0.3350 } },
   { limiteSuperior: 360000, aliquotaNominal: 0.112, parcelaDeduzir: 9360, partilha: { irpj: 0.040, csll: 0.035, cofins: 0.1282, pis: 0.0278, cpp: 0.4340, iss: 0.3350 } },
@@ -34,6 +34,16 @@ const TABELA_ANEXO_III: SimplesFaixa[] = [
   { limiteSuperior: 1800000, aliquotaNominal: 0.160, parcelaDeduzir: 35640, partilha: { irpj: 0.040, csll: 0.035, cofins: 0.1282, pis: 0.0278, cpp: 0.4340, iss: 0.3350 } },
   { limiteSuperior: 3600000, aliquotaNominal: 0.210, parcelaDeduzir: 125640, partilha: { irpj: 0.040, csll: 0.035, cofins: 0.1282, pis: 0.0278, cpp: 0.4340, iss: 0.3350 } },
   { limiteSuperior: 4800000, aliquotaNominal: 0.330, parcelaDeduzir: 648000, partilha: { irpj: 0.350, csll: 0.150, cofins: 0.1600, pis: 0.0350, cpp: 0.3050 } },
+];
+
+// Anexo V - Serviços com Fator R < 28% (Alíquotas majoradas da LC 123/2006)
+const TABELA_ANEXO_V: SimplesFaixa[] = [
+  { limiteSuperior: 180000, aliquotaNominal: 0.155, parcelaDeduzir: 0, partilha: { irpj: 0.250, csll: 0.150, cofins: 0.1410, pis: 0.0305, cpp: 0.2885, iss: 0.1400 } },
+  { limiteSuperior: 360000, aliquotaNominal: 0.180, parcelaDeduzir: 4500, partilha: { irpj: 0.230, csll: 0.150, cofins: 0.1410, pis: 0.0305, cpp: 0.2785, iss: 0.1700 } },
+  { limiteSuperior: 720000, aliquotaNominal: 0.195, parcelaDeduzir: 9900, partilha: { irpj: 0.240, csll: 0.150, cofins: 0.1410, pis: 0.0305, cpp: 0.2385, iss: 0.2000 } },
+  { limiteSuperior: 1800000, aliquotaNominal: 0.205, parcelaDeduzir: 17100, partilha: { irpj: 0.210, csll: 0.150, cofins: 0.1410, pis: 0.0305, cpp: 0.2385, iss: 0.2300 } },
+  { limiteSuperior: 3600000, aliquotaNominal: 0.230, parcelaDeduzir: 62100, partilha: { irpj: 0.230, csll: 0.125, cofins: 0.1410, pis: 0.0305, cpp: 0.2385, iss: 0.2350 } },
+  { limiteSuperior: 4800000, aliquotaNominal: 0.305, parcelaDeduzir: 540000, partilha: { irpj: 0.350, csll: 0.155, cofins: 0.1610, pis: 0.0350, cpp: 0.2990 } },
 ];
 
 export function calculateTaxAssessment(
@@ -54,9 +64,47 @@ export function calculateTaxAssessment(
   const assessmentId = `assess-${company.id}-${competencia.replace('/', '')}`;
 
   if (company.regimeTributario === 'SIMPLES_NACIONAL') {
-    const anexo = company.anexoSimples || 'ANEXO_I';
-    const tabela = anexo === 'ANEXO_III' ? TABELA_ANEXO_III : TABELA_ANEXO_I;
+    let anexo = company.anexoSimples || 'ANEXO_I';
     const rbt12 = company.rbt12 || 300000;
+    let fatorRDetails: TaxAssessment['simples'] extends { fatorR?: infer R } ? R : never;
+
+    // Regra do Fator R (Art. 18, §§ 5º-J e 5º-M da Lei Complementar 123/2006)
+    if (company.sujeitoFatorR || anexo === 'ANEXO_III' || anexo === 'ANEXO_V') {
+      const folha12 = company.folha12Meses || 0;
+      const fatorRatio = rbt12 > 0 ? (folha12 / rbt12) : 0;
+      const fatorPercentual = Math.round(fatorRatio * 10000) / 100;
+      const atingiuLimite28 = fatorPercentual >= 28.0;
+
+      // Se Fator R >= 28%, tributa pelo Anexo III. Se < 28%, tributa pelo Anexo V.
+      anexo = atingiuLimite28 ? 'ANEXO_III' : 'ANEXO_V';
+
+      const valorMinimoPara28 = Math.round(rbt12 * 0.28 * 100) / 100;
+      const deficitFolha = Math.max(0, valorMinimoPara28 - folha12);
+
+      let recomendacao = '';
+      if (atingiuLimite28) {
+        recomendacao = `Fator R apurado em ${fatorPercentual}% (meta >= 28%). Enquadramento assegurado no Anexo III, garantindo tributação a partir de 6%.`;
+      } else {
+        recomendacao = `Fator R apurado em ${fatorPercentual}% (abaixo do teto de 28%). Enquadrado compulsoriamente no Anexo V (alíquota a partir de 15,5%). Recomenda-se avaliar acréscimo de pró-labore de R$ ${deficitFolha.toLocaleString('pt-BR', { minimumFractionDigits: 2 })} nos próximos meses para atingir a meta.`;
+      }
+
+      fatorRDetails = {
+        sujeitoFatorR: true,
+        folha12Meses: folha12,
+        rbt12,
+        fatorPercentual,
+        atingiuLimite28,
+        anexoAplicado: anexo,
+        recomendacao,
+      };
+    }
+
+    let tabela = TABELA_ANEXO_I;
+    if (anexo === 'ANEXO_III') {
+      tabela = TABELA_ANEXO_III;
+    } else if (anexo === 'ANEXO_V') {
+      tabela = TABELA_ANEXO_V;
+    }
 
     // Encontrar faixa
     let faixa = tabela[0];
@@ -125,6 +173,7 @@ export function calculateTaxAssessment(
         aliquotaEfetiva: Math.round(aliqEfetiva * 10000) / 100,
         valorDevido,
         partilhaTributos: partilha,
+        fatorR: fatorRDetails,
       },
       guias,
     };

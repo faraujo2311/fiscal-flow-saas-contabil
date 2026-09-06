@@ -13,7 +13,14 @@ import {
   DollarSign, 
   Filter, 
   GitCommit,
-  CheckCheck
+  CheckCheck,
+  Building2,
+  BookMarked,
+  CalendarCheck,
+  Printer,
+  Search,
+  ArrowRight,
+  ShieldAlert
 } from 'lucide-react';
 import { 
   AccountingAccount, 
@@ -27,6 +34,9 @@ import {
   autoJournalizeFiscalDocuments, 
   generateDreStatement, 
   generateTrialBalance, 
+  generateBalanceSheet,
+  generateGeneralLedger,
+  generateClosingEntries,
   validateDoubleEntry 
 } from '../services/accountingEngine';
 
@@ -53,7 +63,11 @@ export const AccountingView: React.FC<AccountingViewProps> = ({
   onAddAccount,
   onAutoJournalize,
 }) => {
-  const [subTab, setSubTab] = useState<'lancamentos' | 'balancete' | 'dre' | 'plano' | 'regras' | 'conciliacao'>('lancamentos');
+  const [subTab, setSubTab] = useState<'lancamentos' | 'balancete' | 'dre' | 'balanco' | 'razao' | 'encerramento' | 'plano' | 'regras' | 'conciliacao'>('lancamentos');
+
+  // Estado do Livro Razão
+  const [selectedAccountForLedger, setSelectedAccountForLedger] = useState<string>('1.1.01.02.001');
+  const [ledgerSearchTerm, setLedgerSearchTerm] = useState<string>('');
 
   // Modal Novo Lançamento
   const [isEntryModalOpen, setIsEntryModalOpen] = useState(false);
@@ -75,9 +89,13 @@ export const AccountingView: React.FC<AccountingViewProps> = ({
   const compEntries = entries.filter(e => e.companyId === company.id);
   const compAccounts = accounts.filter(a => a.companyId === company.id);
 
-  // Balancete e DRE
+  // Relatórios Oficiais
   const trialBalance = generateTrialBalance(compAccounts, compEntries);
   const dre = generateDreStatement(compAccounts, compEntries);
+  const balanceSheet = generateBalanceSheet(compAccounts, compEntries);
+  const generalLedger = generateGeneralLedger(selectedAccountForLedger, compAccounts, compEntries);
+  const closingSimulation = generateClosingEntries(company.id, competencia, compAccounts, compEntries);
+  const hasClosingEntry = compEntries.some(e => e.origemTipo === 'ENCERRAMENTO');
 
   // Validação em tempo real do novo lançamento
   const entryValidation = validateDoubleEntry(entryLines);
@@ -211,6 +229,45 @@ export const AccountingView: React.FC<AccountingViewProps> = ({
         >
           <TrendingUp className="w-3.5 h-3.5" />
           DRE Oficial
+        </button>
+
+        <button
+          type="button"
+          onClick={() => setSubTab('balanco')}
+          className={`px-3.5 py-2.5 font-semibold rounded-t-lg transition-colors flex items-center gap-1.5 cursor-pointer ${
+            subTab === 'balanco'
+              ? 'bg-white text-blue-600 border-b-2 border-blue-600 shadow-xs'
+              : 'text-slate-500 hover:text-slate-900 hover:bg-slate-100/60'
+          }`}
+        >
+          <Building2 className="w-3.5 h-3.5" />
+          Balanço Patrimonial
+        </button>
+
+        <button
+          type="button"
+          onClick={() => setSubTab('razao')}
+          className={`px-3.5 py-2.5 font-semibold rounded-t-lg transition-colors flex items-center gap-1.5 cursor-pointer ${
+            subTab === 'razao'
+              ? 'bg-white text-blue-600 border-b-2 border-blue-600 shadow-xs'
+              : 'text-slate-500 hover:text-slate-900 hover:bg-slate-100/60'
+          }`}
+        >
+          <BookMarked className="w-3.5 h-3.5" />
+          Livro Razão Analítico
+        </button>
+
+        <button
+          type="button"
+          onClick={() => setSubTab('encerramento')}
+          className={`px-3.5 py-2.5 font-semibold rounded-t-lg transition-colors flex items-center gap-1.5 cursor-pointer ${
+            subTab === 'encerramento'
+              ? 'bg-white text-blue-600 border-b-2 border-blue-600 shadow-xs'
+              : 'text-slate-500 hover:text-slate-900 hover:bg-slate-100/60'
+          }`}
+        >
+          <CalendarCheck className="w-3.5 h-3.5" />
+          Encerramento (ARE)
         </button>
 
         <button
@@ -465,7 +522,491 @@ export const AccountingView: React.FC<AccountingViewProps> = ({
         </div>
       )}
 
-      {/* 4. ABA PLANO DE CONTAS */}
+      {/* 4. ABA BALANÇO PATRIMONIAL OFICIAL */}
+      {subTab === 'balanco' && (
+        <div className="space-y-4">
+          <div className="bg-white border border-slate-200 rounded-xl p-6 shadow-xs space-y-6">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-100 pb-4">
+              <div>
+                <div className="flex items-center gap-2">
+                  <h2 className="text-base font-bold text-slate-900">Balanço Patrimonial Estático & Dinâmico</h2>
+                  <span className={`px-2.5 py-0.5 rounded-full text-xs font-semibold border flex items-center gap-1 ${
+                    balanceSheet.equilibrado 
+                      ? 'bg-emerald-50 text-emerald-700 border-emerald-200' 
+                      : 'bg-rose-50 text-rose-700 border-rose-200'
+                  }`}>
+                    {balanceSheet.equilibrado ? (
+                      <>
+                        <CheckCircle2 className="w-3.5 h-3.5" />
+                        Equação Fundamental Equilibrada (Ativo = Passivo + PL)
+                      </>
+                    ) : (
+                      <>
+                        <AlertCircle className="w-3.5 h-3.5" />
+                        Diferença de Equilíbrio: {balanceSheet.diferenca.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
+                      </>
+                    )}
+                  </span>
+                </div>
+                <p className="text-xs text-slate-500 mt-1">
+                  Demonstração contábil oficial nos termos das NBC TG e Lei das S/A (6.404/76) • Competência {competencia}
+                </p>
+              </div>
+
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => window.print()}
+                  className="px-3 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-colors cursor-pointer"
+                >
+                  <Printer className="w-3.5 h-3.5" />
+                  Imprimir Balanço
+                </button>
+              </div>
+            </div>
+
+            {/* Cards de Métricas do Balanço */}
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+              <div className="p-4 bg-blue-50/60 border border-blue-100 rounded-xl">
+                <span className="text-[11px] font-semibold text-blue-800 uppercase tracking-wide">Total do Ativo</span>
+                <div className="text-xl font-bold text-blue-900 mt-1">
+                  {balanceSheet.totalAtivo.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
+                </div>
+                <div className="text-[11px] text-blue-700 mt-0.5 flex justify-between">
+                  <span>Circulante: {balanceSheet.subtotalAtivoCirculante.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}</span>
+                </div>
+              </div>
+
+              <div className="p-4 bg-amber-50/60 border border-amber-100 rounded-xl">
+                <span className="text-[11px] font-semibold text-amber-800 uppercase tracking-wide">Passivo Exigível</span>
+                <div className="text-xl font-bold text-amber-900 mt-1">
+                  {(balanceSheet.subtotalPassivoCirculante + balanceSheet.subtotalPassivoNaoCirculante).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
+                </div>
+                <div className="text-[11px] text-amber-700 mt-0.5">
+                  Circulante: {balanceSheet.subtotalPassivoCirculante.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
+                </div>
+              </div>
+
+              <div className="p-4 bg-emerald-50/60 border border-emerald-100 rounded-xl">
+                <span className="text-[11px] font-semibold text-emerald-800 uppercase tracking-wide">Patrimônio Líquido</span>
+                <div className="text-xl font-bold text-emerald-900 mt-1">
+                  {balanceSheet.subtotalPatrimonioLiquido.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
+                </div>
+                <div className="text-[11px] text-emerald-700 mt-0.5">
+                  Resultado DRE no Período: {balanceSheet.resultadoExercicioApurado.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
+                </div>
+              </div>
+            </div>
+
+            {/* Balanço em 2 Colunas (Ativo vs Passivo + PL) */}
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+              {/* LADO DO ATIVO */}
+              <div className="border border-slate-200 rounded-xl overflow-hidden shadow-2xs">
+                <div className="bg-slate-100/80 px-4 py-3 border-b border-slate-200 flex items-center justify-between">
+                  <span className="font-bold text-slate-900 text-xs uppercase tracking-wider flex items-center gap-1.5">
+                    <Building2 className="w-3.5 h-3.5 text-blue-600" />
+                    1. ATIVO TOTAL
+                  </span>
+                  <span className="font-mono font-bold text-blue-800 text-sm">
+                    {balanceSheet.totalAtivo.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
+                  </span>
+                </div>
+
+                <div className="divide-y divide-slate-100 p-3 space-y-4 text-xs font-mono">
+                  {/* Ativo Circulante */}
+                  <div>
+                    <div className="flex items-center justify-between py-1 px-2 font-bold text-slate-800 bg-slate-50 rounded">
+                      <span>1.1 ATIVO CIRCULANTE</span>
+                      <span>{balanceSheet.subtotalAtivoCirculante.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}</span>
+                    </div>
+                    <div className="pl-3 mt-1 space-y-1 text-slate-600">
+                      {balanceSheet.ativoCirculante.map((item) => (
+                        <div key={item.codigo} className={`flex items-center justify-between py-0.5 px-2 ${item.tipo === 'SINTETICA' ? 'font-semibold text-slate-700' : 'text-[11px] text-slate-500'}`}>
+                          <span>{item.codigo} {item.nome}</span>
+                          <span>{item.saldo.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Ativo Não Circulante */}
+                  <div>
+                    <div className="flex items-center justify-between py-1 px-2 font-bold text-slate-800 bg-slate-50 rounded">
+                      <span>1.2 ATIVO NÃO CIRCULANTE</span>
+                      <span>{balanceSheet.subtotalAtivoNaoCirculante.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}</span>
+                    </div>
+                    <div className="pl-3 mt-1 space-y-1 text-slate-600">
+                      {balanceSheet.ativoNaoCirculante.map((item) => (
+                        <div key={item.codigo} className={`flex items-center justify-between py-0.5 px-2 ${item.tipo === 'SINTETICA' ? 'font-semibold text-slate-700' : 'text-[11px] text-slate-500'}`}>
+                          <span>{item.codigo} {item.nome}</span>
+                          <span>{item.saldo.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+
+                <div className="bg-slate-50 px-4 py-3 border-t border-slate-200 flex items-center justify-between font-bold text-slate-900 text-xs">
+                  <span>TOTAL DO ATIVO</span>
+                  <span className="font-mono text-blue-700 text-sm">
+                    {balanceSheet.totalAtivo.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
+                  </span>
+                </div>
+              </div>
+
+              {/* LADO DO PASSIVO E PATRIMÔNIO LÍQUIDO */}
+              <div className="border border-slate-200 rounded-xl overflow-hidden shadow-2xs">
+                <div className="bg-slate-100/80 px-4 py-3 border-b border-slate-200 flex items-center justify-between">
+                  <span className="font-bold text-slate-900 text-xs uppercase tracking-wider flex items-center gap-1.5">
+                    <Scale className="w-3.5 h-3.5 text-emerald-600" />
+                    2. PASSIVO E PATRIMÔNIO LÍQUIDO
+                  </span>
+                  <span className="font-mono font-bold text-emerald-800 text-sm">
+                    {balanceSheet.totalPassivoEPatrimonioLiquido.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
+                  </span>
+                </div>
+
+                <div className="divide-y divide-slate-100 p-3 space-y-4 text-xs font-mono">
+                  {/* Passivo Circulante */}
+                  <div>
+                    <div className="flex items-center justify-between py-1 px-2 font-bold text-slate-800 bg-slate-50 rounded">
+                      <span>2.1 PASSIVO CIRCULANTE</span>
+                      <span>{balanceSheet.subtotalPassivoCirculante.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}</span>
+                    </div>
+                    <div className="pl-3 mt-1 space-y-1 text-slate-600">
+                      {balanceSheet.passivoCirculante.map((item) => (
+                        <div key={item.codigo} className={`flex items-center justify-between py-0.5 px-2 ${item.tipo === 'SINTETICA' ? 'font-semibold text-slate-700' : 'text-[11px] text-slate-500'}`}>
+                          <span>{item.codigo} {item.nome}</span>
+                          <span>{item.saldo.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Passivo Não Circulante */}
+                  <div>
+                    <div className="flex items-center justify-between py-1 px-2 font-bold text-slate-800 bg-slate-50 rounded">
+                      <span>2.2 PASSIVO NÃO CIRCULANTE</span>
+                      <span>{balanceSheet.subtotalPassivoNaoCirculante.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}</span>
+                    </div>
+                    <div className="pl-3 mt-1 text-[11px] text-slate-500 px-2">
+                      Nenhuma exigibilidade de longo prazo registrada.
+                    </div>
+                  </div>
+
+                  {/* Patrimônio Líquido */}
+                  <div>
+                    <div className="flex items-center justify-between py-1 px-2 font-bold text-slate-800 bg-slate-50 rounded">
+                      <span>2.3 PATRIMÔNIO LÍQUIDO</span>
+                      <span>{balanceSheet.subtotalPatrimonioLiquido.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}</span>
+                    </div>
+                    <div className="pl-3 mt-1 space-y-1 text-slate-600">
+                      {balanceSheet.patrimonioLiquido.map((item) => (
+                        <div key={item.codigo} className={`flex items-center justify-between py-0.5 px-2 ${item.codigo.includes('03.01') ? 'font-bold text-emerald-700 bg-emerald-50/50 rounded' : item.tipo === 'SINTETICA' ? 'font-semibold text-slate-700' : 'text-[11px] text-slate-500'}`}>
+                          <span>{item.codigo} {item.nome}</span>
+                          <span>{item.saldo.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+
+                <div className="bg-slate-50 px-4 py-3 border-t border-slate-200 flex items-center justify-between font-bold text-slate-900 text-xs">
+                  <span>TOTAL PASSIVO + PL</span>
+                  <span className="font-mono text-emerald-700 text-sm">
+                    {balanceSheet.totalPassivoEPatrimonioLiquido.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
+                  </span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 5. ABA LIVRO RAZÃO ANALÍTICO (RAZONETES) */}
+      {subTab === 'razao' && (
+        <div className="space-y-4">
+          <div className="bg-white border border-slate-200 rounded-xl p-5 shadow-xs space-y-5">
+            <div>
+              <h2 className="text-base font-bold text-slate-900 flex items-center gap-2">
+                <BookMarked className="w-4 h-4 text-blue-600" />
+                Livro Razão Analítico • Razonetes por Conta
+              </h2>
+              <p className="text-xs text-slate-500 mt-1">
+                Extrato cronológico com rastreamento integral de débitos, créditos e evolução do saldo por conta contábil analítica.
+              </p>
+            </div>
+
+            {/* Barra de Seleção e Busca de Conta */}
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 bg-slate-50 p-4 border border-slate-200 rounded-xl">
+              <div className="sm:col-span-2">
+                <label className="block text-xs font-semibold text-slate-700 mb-1">
+                  Selecione a Conta Contábil Analítica
+                </label>
+                <select
+                  value={selectedAccountForLedger}
+                  onChange={(e) => setSelectedAccountForLedger(e.target.value)}
+                  className="w-full px-3 py-2 bg-white border border-slate-300 rounded-lg text-xs text-slate-800 font-medium focus:outline-none focus:border-blue-500"
+                >
+                  {compAccounts
+                    .filter(a => a.tipo === 'ANALITICA')
+                    .map(a => (
+                      <option key={a.codigo} value={a.codigo}>
+                        {a.codigo} ({a.codigoReduzido}) - {a.nome}
+                      </option>
+                    ))}
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-slate-700 mb-1">
+                  Filtrar no Histórico
+                </label>
+                <div className="relative">
+                  <Search className="w-3.5 h-3.5 absolute left-3 top-2.5 text-slate-400" />
+                  <input
+                    type="text"
+                    placeholder="Buscar histórico..."
+                    value={ledgerSearchTerm}
+                    onChange={(e) => setLedgerSearchTerm(e.target.value)}
+                    className="w-full pl-8 pr-3 py-2 bg-white border border-slate-300 rounded-lg text-xs text-slate-800 focus:outline-none focus:border-blue-500"
+                  />
+                </div>
+              </div>
+            </div>
+
+            {/* Cabeçalho da Conta Selecionada */}
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+              <div className="p-3 bg-slate-50 border border-slate-200 rounded-lg">
+                <div className="text-[10px] text-slate-500 uppercase font-semibold">Natureza da Conta</div>
+                <div className="text-xs font-bold text-slate-800 mt-0.5">
+                  {generalLedger.natureza}
+                </div>
+              </div>
+              <div className="p-3 bg-slate-50 border border-slate-200 rounded-lg">
+                <div className="text-[10px] text-slate-500 uppercase font-semibold">Saldo Anterior/Inicial</div>
+                <div className="text-xs font-mono font-bold text-slate-800 mt-0.5">
+                  {generalLedger.saldoInicial.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
+                </div>
+              </div>
+              <div className="p-3 bg-blue-50/70 border border-blue-100 rounded-lg">
+                <div className="text-[10px] text-blue-700 uppercase font-semibold">Total Débitos</div>
+                <div className="text-xs font-mono font-bold text-blue-900 mt-0.5">
+                  {generalLedger.totalDebitos.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
+                </div>
+              </div>
+              <div className="p-3 bg-emerald-50/70 border border-emerald-100 rounded-lg">
+                <div className="text-[10px] text-emerald-700 uppercase font-semibold">Saldo Atual Resultante</div>
+                <div className="text-xs font-mono font-bold text-emerald-900 mt-0.5">
+                  {generalLedger.saldoFinal.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
+                </div>
+              </div>
+            </div>
+
+            {/* Tabela de Linhas do Razão */}
+            <div className="border border-slate-200 rounded-xl overflow-hidden shadow-2xs">
+              <div className="overflow-x-auto">
+                <table className="w-full text-left text-xs">
+                  <thead className="bg-slate-50 text-slate-500 text-[10px] uppercase font-semibold border-b border-slate-200">
+                    <tr>
+                      <th className="py-2.5 px-3">Data</th>
+                      <th className="py-2.5 px-3">Lçto</th>
+                      <th className="py-2.5 px-3">Origem</th>
+                      <th className="py-2.5 px-3">Histórico do Lançamento</th>
+                      <th className="py-2.5 px-3 text-right">Débito (+)</th>
+                      <th className="py-2.5 px-3 text-right">Crédito (-)</th>
+                      <th className="py-2.5 px-3 text-right">Saldo Acumulado</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100 font-mono text-[11px]">
+                    <tr className="bg-slate-50/50 font-semibold text-slate-600">
+                      <td className="py-2 px-3">{competencia ? `01/${competencia}` : '01/09/2026'}</td>
+                      <td className="py-2 px-3">-</td>
+                      <td className="py-2 px-3 font-sans">SALDO INICIAL</td>
+                      <td className="py-2 px-3 font-sans text-slate-500">Transporte de saldo da competência anterior</td>
+                      <td className="py-2 px-3 text-right">-</td>
+                      <td className="py-2 px-3 text-right">-</td>
+                      <td className="py-2 px-3 text-right font-bold text-slate-900">
+                        {generalLedger.saldoInicial.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
+                      </td>
+                    </tr>
+                    {generalLedger.linhas
+                      .filter(l => !ledgerSearchTerm || l.historico.toLowerCase().includes(ledgerSearchTerm.toLowerCase()))
+                      .map((l) => (
+                        <tr key={`${l.entryId}-${l.entryNumero}`} className="hover:bg-slate-50/80 transition-colors">
+                          <td className="py-2 px-3 text-slate-700">{l.data}</td>
+                          <td className="py-2 px-3 font-bold text-blue-600">#{l.entryNumero}</td>
+                          <td className="py-2 px-3 font-sans">
+                            <span className="px-1.5 py-0.5 rounded text-[10px] font-semibold bg-slate-100 text-slate-700 border border-slate-200">
+                              {l.origemTipo}
+                            </span>
+                          </td>
+                          <td className="py-2 px-3 font-sans text-slate-800">
+                            {l.historico}
+                            {l.documentoRef && (
+                              <span className="ml-1 text-[10px] text-slate-400 font-mono">[{l.documentoRef}]</span>
+                            )}
+                          </td>
+                          <td className="py-2 px-3 text-right text-blue-700 font-bold">
+                            {l.debito > 0 ? l.debito.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' }) : '-'}
+                          </td>
+                          <td className="py-2 px-3 text-right text-amber-700 font-bold">
+                            {l.credito > 0 ? l.credito.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' }) : '-'}
+                          </td>
+                          <td className="py-2 px-3 text-right font-bold text-slate-900">
+                            {l.saldoResultante.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
+                          </td>
+                        </tr>
+                      ))}
+                    {generalLedger.linhas.length === 0 && (
+                      <tr>
+                        <td colSpan={7} className="py-6 text-center text-slate-400 font-sans text-xs">
+                          Nenhum lançamento registrado nesta conta para a competência atual.
+                        </td>
+                      </tr>
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 6. ABA ENCERRAMENTO DO EXERCÍCIO / ARE */}
+      {subTab === 'encerramento' && (
+        <div className="space-y-4">
+          <div className="bg-white border border-slate-200 rounded-xl p-6 shadow-xs space-y-6">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-100 pb-4">
+              <div>
+                <h2 className="text-base font-bold text-slate-900 flex items-center gap-2">
+                  <CalendarCheck className="w-4 h-4 text-purple-600" />
+                  Apuração do Resultado do Exercício (ARE) • Encerramento de Contas
+                </h2>
+                <p className="text-xs text-slate-500 mt-1">
+                  Rotina contábil obrigatória para zerar contas temporárias de Receitas e Despesas/Custos, apurando o Lucro ou Prejuízo Líquido transferido ao Patrimônio Líquido.
+                </p>
+              </div>
+
+              {hasClosingEntry ? (
+                <span className="px-3 py-1.5 bg-emerald-50 text-emerald-700 border border-emerald-200 rounded-full text-xs font-bold flex items-center gap-1.5">
+                  <CheckCircle2 className="w-4 h-4" />
+                  Exercício Já Encerrado
+                </span>
+              ) : (
+                <span className="px-3 py-1.5 bg-amber-50 text-amber-700 border border-amber-200 rounded-full text-xs font-bold flex items-center gap-1.5">
+                  <AlertCircle className="w-4 h-4" />
+                  Aguardando Encerramento
+                </span>
+              )}
+            </div>
+
+            {/* Painel de Balanço da Apuração */}
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+              <div className="p-4 bg-slate-50 border border-slate-200 rounded-xl">
+                <span className="text-[11px] font-semibold text-slate-500 uppercase">Receitas Brutas a Zerar</span>
+                <div className="text-lg font-bold text-emerald-700 mt-1">
+                  {closingSimulation.totalReceitas.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
+                </div>
+                <div className="text-[10px] text-slate-500 mt-0.5">
+                  Débito nas contas de Receita Operacional
+                </div>
+              </div>
+
+              <div className="p-4 bg-slate-50 border border-slate-200 rounded-xl">
+                <span className="text-[11px] font-semibold text-slate-500 uppercase">Despesas & Custos a Zerar</span>
+                <div className="text-lg font-bold text-amber-700 mt-1">
+                  {closingSimulation.totalDespesas.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
+                </div>
+                <div className="text-[10px] text-slate-500 mt-0.5">
+                  Crédito nas contas de Custos e Despesas
+                </div>
+              </div>
+
+              <div className={`p-4 rounded-xl border ${
+                closingSimulation.resultadoLiquido >= 0 
+                  ? 'bg-blue-50/70 border-blue-200' 
+                  : 'bg-rose-50/70 border-rose-200'
+              }`}>
+                <span className="text-[11px] font-semibold text-blue-800 uppercase">Resultado Líquido Apurado</span>
+                <div className={`text-lg font-bold mt-1 ${
+                  closingSimulation.resultadoLiquido >= 0 ? 'text-blue-900' : 'text-rose-900'
+                }`}>
+                  {closingSimulation.resultadoLiquido.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
+                </div>
+                <div className="text-[10px] text-blue-700 mt-0.5">
+                  {closingSimulation.resultadoLiquido >= 0 
+                    ? 'Transferência a Crédito de Lucros Acumulados' 
+                    : 'Transferência a Débito de Prejuízos Acumulados'}
+                </div>
+              </div>
+            </div>
+
+            {/* Detalhamento das Contas Envolvidas */}
+            <div className="p-4 bg-slate-50 border border-slate-200 rounded-xl space-y-3">
+              <h3 className="text-xs font-bold text-slate-800 uppercase tracking-wider">
+                Mapeamento das Contas de Contrapartida
+              </h3>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
+                <div className="bg-white p-3 border border-slate-200 rounded-lg">
+                  <span className="text-[10px] font-bold text-blue-600 uppercase">Conta Transitória de ARE</span>
+                  <div className="font-semibold text-slate-800 mt-0.5">3.9.01.01.001 - Resultado do Exercício em Apuração</div>
+                  <p className="text-[11px] text-slate-500 mt-1">
+                    Centraliza os saldos de encerramento temporários das contas de resultado.
+                  </p>
+                </div>
+                <div className="bg-white p-3 border border-slate-200 rounded-lg">
+                  <span className="text-[10px] font-bold text-emerald-600 uppercase">Conta Definitiva de Destino no PL</span>
+                  <div className="font-semibold text-slate-800 mt-0.5">2.3.02.01.001 - Lucros ou Prejuízos Acumulados</div>
+                  <p className="text-[11px] text-slate-500 mt-1">
+                    Incorpora o resultado líquido final no Patrimônio Líquido da empresa.
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            {/* Ação de Execução */}
+            {!hasClosingEntry ? (
+              <div className="p-4 bg-purple-50 border border-purple-200 rounded-xl flex flex-col sm:flex-row items-center justify-between gap-4">
+                <div>
+                  <div className="text-xs font-bold text-purple-900">
+                    Deseja gerar o lançamento de encerramento oficial no Livro Diário?
+                  </div>
+                  <div className="text-[11px] text-purple-700 mt-0.5">
+                    O sistema criará automaticamente as partidas dobradas zerando as receitas e despesas e transferindo o lucro para o PL.
+                  </div>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (closingSimulation.closingEntry) {
+                      onAddEntry(closingSimulation.closingEntry);
+                      alert('Encerramento contábil executado com sucesso! Lançamento de ARE inserido no Livro Diário.');
+                    }
+                  }}
+                  className="px-4 py-2.5 bg-purple-600 hover:bg-purple-700 text-white rounded-lg text-xs font-bold flex items-center gap-2 shadow-xs shadow-purple-200 transition-colors cursor-pointer shrink-0"
+                >
+                  <Check className="w-4 h-4" />
+                  Executar Encerramento de Contas (ARE)
+                </button>
+              </div>
+            ) : (
+              <div className="p-4 bg-emerald-50 border border-emerald-200 rounded-xl flex items-center justify-between text-xs text-emerald-800">
+                <span className="font-semibold flex items-center gap-2">
+                  <CheckCircle2 className="w-4 h-4 text-emerald-600" />
+                  O encerramento deste exercício foi gravado e registrado no Livro Diário.
+                </span>
+                <span className="font-mono text-emerald-700 font-bold">
+                  Ref: ARE - {competencia}
+                </span>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* 7. ABA PLANO DE CONTAS */}
       {subTab === 'plano' && (
         <div className="space-y-4">
           <div className="flex justify-between items-center bg-white border border-slate-200 p-4 rounded-xl shadow-xs">
