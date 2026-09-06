@@ -47,14 +47,16 @@ export const LoginView: React.FC<LoginViewProps> = ({
   const [changeError, setChangeError] = useState<string | null>(null);
 
   // Recarregar captcha
-  const refreshCaptcha = () => {
+  const refreshCaptcha = (clearError: boolean = false) => {
     setCaptcha(generateCaptcha());
     setCaptchaInput('');
-    setError(null);
+    if (clearError) {
+      setError(null);
+    }
   };
 
   useEffect(() => {
-    refreshCaptcha();
+    refreshCaptcha(true);
   }, []);
 
   const handleLogin = (e: React.FormEvent) => {
@@ -69,7 +71,7 @@ export const LoginView: React.FC<LoginViewProps> = ({
 
     if (captchaInput.trim().toUpperCase() !== captcha.code.toUpperCase()) {
       setError('Código Captcha incorreto. Tente novamente.');
-      refreshCaptcha();
+      refreshCaptcha(false);
       return;
     }
 
@@ -82,7 +84,7 @@ export const LoginView: React.FC<LoginViewProps> = ({
       if (!foundUser) {
         setError('E-mail ou credenciais não encontrados no sistema.');
         setIsLoading(false);
-        refreshCaptcha();
+        refreshCaptcha(false);
         return;
       }
 
@@ -90,7 +92,7 @@ export const LoginView: React.FC<LoginViewProps> = ({
       if (!foundUser.active) {
         setError('Acesso negado: Este usuário foi bloqueado pela administração do escritório.');
         setIsLoading(false);
-        refreshCaptcha();
+        refreshCaptcha(false);
         return;
       }
 
@@ -99,7 +101,7 @@ export const LoginView: React.FC<LoginViewProps> = ({
       if (password !== expectedPassword && password !== 'Admin#2026!Sec@' && password !== 'Admin@2026!') {
         setError('Senha incorreta. Verifique os caracteres e tente novamente.');
         setIsLoading(false);
-        refreshCaptcha();
+        refreshCaptcha(false);
         return;
       }
 
@@ -338,7 +340,7 @@ export const LoginView: React.FC<LoginViewProps> = ({
                 </label>
                 <button
                   type="button"
-                  onClick={refreshCaptcha}
+                  onClick={() => refreshCaptcha(true)}
                   className="text-[11px] text-blue-600 hover:text-blue-800 font-semibold flex items-center gap-1 cursor-pointer"
                   title="Gerar novo código captcha"
                 >
