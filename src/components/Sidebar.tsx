@@ -17,7 +17,8 @@ import {
   Globe,
   ExternalLink
 } from 'lucide-react';
-import { SystemCustomization } from '../types';
+import { SystemCustomization, SystemUser, RolePermissionConfig } from '../types';
+import { Building2, LogOut } from 'lucide-react';
 
 export type TabId = 
   | 'dashboard' 
@@ -41,6 +42,10 @@ interface SidebarProps {
   pendingDocsCount: number;
   pendingObligationsCount: number;
   customization?: SystemCustomization;
+  activeUser?: SystemUser;
+  rolePermissions?: RolePermissionConfig[];
+  onLogout?: () => void;
+  onOpenCompanyModal?: () => void;
   onOpenLandingPage?: () => void;
 }
 
@@ -50,6 +55,10 @@ export const Sidebar: React.FC<SidebarProps> = ({
   pendingDocsCount,
   pendingObligationsCount,
   customization,
+  activeUser,
+  rolePermissions,
+  onLogout,
+  onOpenCompanyModal,
   onOpenLandingPage,
 }) => {
   const brandName = customization?.systemName || 'Lumen Contábil';
@@ -140,6 +149,20 @@ export const Sidebar: React.FC<SidebarProps> = ({
     },
   ];
 
+  // Filtragem de abas permitidas de acordo com o perfil RBAC configurado
+  const isTabAllowed = (tabId: TabId): boolean => {
+    if (!activeUser) return true;
+    if (activeUser.role === 'ADMINISTRADOR') return true;
+    if (!rolePermissions || rolePermissions.length === 0) return true;
+    const roleConfig = rolePermissions.find(r => r.role === activeUser.role);
+    if (!roleConfig) return true;
+    return roleConfig.allowedTabs.includes(tabId);
+  };
+
+  const visibleOperational = operationalItems.filter(item => isTabAllowed(item.id));
+  const visibleCompliance = complianceItems.filter(item => isTabAllowed(item.id));
+  const visibleConfig = configItems.filter(item => isTabAllowed(item.id));
+
   const renderNavGroup = (items: typeof operationalItems) => (
     <div className="space-y-1">
       {items.map((item) => {
@@ -205,56 +228,79 @@ export const Sidebar: React.FC<SidebarProps> = ({
 
       {/* Navigation Sections */}
       <nav className="flex-1 px-3 py-4 space-y-4 overflow-y-auto">
-        <div>
-          <div className="text-[10px] uppercase font-bold tracking-widest text-slate-500 mb-2 px-2">
-            Operacional
+        {visibleOperational.length > 0 && (
+          <div>
+            <div className="text-[10px] uppercase font-bold tracking-widest text-slate-500 mb-2 px-2">
+              Operacional
+            </div>
+            {renderNavGroup(visibleOperational)}
           </div>
-          {renderNavGroup(operationalItems)}
-        </div>
+        )}
 
-        <div>
-          <div className="text-[10px] uppercase font-bold tracking-widest text-slate-500 mb-2 px-2">
-            Conformidade & SPED
+        {visibleCompliance.length > 0 && (
+          <div>
+            <div className="text-[10px] uppercase font-bold tracking-widest text-slate-500 mb-2 px-2">
+              Conformidade & SPED
+            </div>
+            {renderNavGroup(visibleCompliance)}
           </div>
-          {renderNavGroup(complianceItems)}
-        </div>
+        )}
 
-        <div>
-          <div className="text-[10px] uppercase font-bold tracking-widest text-purple-400/80 mb-2 px-2">
-            Configurações & Gestão
-          </div>
-          {renderNavGroup(configItems)}
-        </div>
-
-        {/* Botão de Destaque da Landing Page */}
-        {onOpenLandingPage && (
-          <div className="pt-2 px-1">
-            <button
-              type="button"
-              onClick={onOpenLandingPage}
-              className="w-full flex items-center justify-between p-2.5 rounded-lg bg-gradient-to-r from-blue-900/40 to-indigo-900/40 border border-blue-500/30 text-blue-300 hover:text-white hover:border-blue-400/60 transition-all text-xs font-semibold cursor-pointer group"
-            >
-              <div className="flex items-center gap-2">
-                <Globe className="w-4 h-4 text-blue-400 group-hover:rotate-12 transition-transform" />
-                <span>Ver Landing Page</span>
-              </div>
-              <ExternalLink className="w-3 h-3 text-blue-400/70" />
-            </button>
+        {visibleConfig.length > 0 && (
+          <div>
+            <div className="text-[10px] uppercase font-bold tracking-widest text-purple-400/80 mb-2 px-2">
+              Configurações & Gestão
+            </div>
+            {renderNavGroup(visibleConfig)}
           </div>
         )}
       </nav>
 
       {/* Bottom Profile / Tenant Box */}
-      <div className="p-4 mt-auto bg-slate-900 border-t border-slate-800">
-        <div className="flex items-center gap-3">
-          <div className="w-8 h-8 rounded-full bg-slate-700 flex items-center justify-center text-xs font-bold text-slate-300 shrink-0">
+      <div className="p-3 mt-auto bg-slate-900 border-t border-slate-800 space-y-2.5">
+        {/* Cartão do Usuário Logado */}
+        {activeUser && (
+          <div className="p-2.5 rounded-lg bg-slate-800/80 border border-slate-700/60 flex items-center justify-between gap-2">
+            <div className="flex items-center gap-2 overflow-hidden">
+              <div className={`w-7 h-7 rounded-full ${activeUser.avatarColor || 'bg-blue-600'} text-white font-bold text-[10px] flex items-center justify-center shrink-0`}>
+                {activeUser.name.split(' ').map(n => n[0]).slice(0, 2).join('')}
+              </div>
+              <div className="overflow-hidden">
+                <div className="text-xs font-bold text-white truncate leading-tight">
+                  {activeUser.name}
+                </div>
+                <div className="text-[10px] text-slate-400 truncate">
+                  {activeUser.role}
+                </div>
+              </div>
+            </div>
+
+            {onLogout && (
+              <button
+                type="button"
+                onClick={onLogout}
+                title="Deslogar do Sistema"
+                className="p-1.5 text-slate-400 hover:text-rose-400 hover:bg-rose-950/40 rounded transition-colors cursor-pointer"
+              >
+                <LogOut className="w-3.5 h-3.5" />
+              </button>
+            )}
+          </div>
+        )}
+
+        {/* Informações da Licença do Escritório */}
+        <div 
+          className="flex items-center gap-2.5 px-1 text-slate-400"
+          title="Escritório Contábil titular da licença do SaaS e responsável técnico com CRC ativo"
+        >
+          <div className="w-6 h-6 rounded bg-slate-800 flex items-center justify-center text-[10px] font-bold text-slate-300 shrink-0">
             {officeName.slice(0, 2).toUpperCase()}
           </div>
-          <div className="overflow-hidden">
-            <div className="text-xs font-semibold text-white truncate">{officeName}</div>
-            <div className="text-[10px] text-slate-500 flex items-center gap-1.5">
+          <div className="overflow-hidden leading-tight">
+            <div className="text-[11px] font-semibold text-slate-300 truncate">{officeName}</div>
+            <div className="text-[9px] text-slate-500 flex items-center gap-1">
               <span className="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
-              Plano Pro • CRC Ativo
+              Plano Pro • CRC Ativo (Licença SaaS)
             </div>
           </div>
         </div>

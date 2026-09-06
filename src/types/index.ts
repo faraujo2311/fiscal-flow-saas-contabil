@@ -565,11 +565,36 @@ export interface SystemCustomization {
   primaryThemeColor: 'blue' | 'emerald' | 'indigo' | 'slate' | 'violet';
   supportEmail: string;
   supportPhone: string;
+  sessionTimeoutMinutes?: number; // Tempo limite de sessão em minutos (padrão: 30)
   landingPage: LandingPageConfig;
 }
 
 // 3. Perfis e Gerenciamento de Usuários (RBAC & Backlog)
 export type SystemRole = 'ADMINISTRADOR' | 'ANALISTA' | 'OPERADOR';
+
+export type TabModuleId = 
+  | 'dashboard' 
+  | 'fiscal' 
+  | 'apuracao' 
+  | 'contabil' 
+  | 'folha' 
+  | 'socios' 
+  | 'sped' 
+  | 'gov' 
+  | 'certificados' 
+  | 'auditoria' 
+  | 'supabase'
+  | 'parametros'
+  | 'personalizacao'
+  | 'usuarios';
+
+export interface RolePermissionConfig {
+  role: SystemRole;
+  roleName: string;
+  description: string;
+  badgeColor: string;
+  allowedTabs: TabModuleId[];
+}
 
 export interface SystemUser {
   id: string;
@@ -579,6 +604,8 @@ export interface SystemUser {
   department: string;
   active: boolean;
   avatarColor: string;
+  password?: string; // Senha de autenticação
+  mustChangePassword?: boolean; // Forçar troca de senha no primeiro acesso
   lastLogin: string;
   createdAt: string;
 }

@@ -17,7 +17,8 @@ import {
   initialAccountingParameters,
   initialSystemCustomization,
   initialSystemUsers,
-  initialUserActivityBacklog
+  initialUserActivityBacklog,
+  initialRolePermissions
 } from './data/initialData';
 import { 
   Company, 
@@ -38,7 +39,8 @@ import {
   SystemCustomization,
   SystemUser,
   UserActivityBacklog,
-  SystemRole
+  SystemRole,
+  RolePermissionConfig
 } from './types';
 import { Header } from './components/Header';
 import { Sidebar, TabId } from './components/Sidebar';
@@ -56,6 +58,9 @@ import { AccountingParametersView } from './components/AccountingParametersView'
 import { CustomizationView } from './components/CustomizationView';
 import { UserManagementView } from './components/UserManagementView';
 import { LandingPageView } from './components/LandingPageView';
+import { LoginView } from './components/LoginView';
+import { CompanyManagementModal } from './components/CompanyManagementModal';
+import { CompetenceManagementModal } from './components/CompetenceManagementModal';
 import { calculateTaxAssessment } from './services/taxEngine';
 import { 
   autoJournalizeFiscalDocuments, 
@@ -63,6 +68,7 @@ import {
   autoJournalizeProfitDistribution,
   generateBalanceSheet 
 } from './services/accountingEngine';
+import { scheduleAutoSync, AutoSyncState } from './services/autoSyncService';
 
 /**
  * Hook de persistência local para manter o estado da aplicação entre recarregamentos (F5)
@@ -124,7 +130,121 @@ export default function App() {
   const [customization, setCustomization] = useLocalStorageState<SystemCustomization>('saas_contabil_customization', initialSystemCustomization);
   const [users, setUsers] = useLocalStorageState<SystemUser[]>('saas_contabil_users', initialSystemUsers);
   const [userBacklog, setUserBacklog] = useLocalStorageState<UserActivityBacklog[]>('saas_contabil_backlog', initialUserActivityBacklog);
+  const [rolePermissions, setRolePermissions] = useLocalStorageState<RolePermissionConfig[]>('audicon_role_permissions', initialRolePermissions);
+  
+  // Estado de Autenticação e Usuário Conectado
+  const [isAuthenticated, setIsAuthenticated] = useLocalStorageState<boolean>('saas_contabil_auth_active', false);
+  const [activeUserId, setActiveUserId] = useLocalStorageState<string>('saas_contabil_active_user_id', 'user-faraujo');
+  const activeUser = users.find(u => u.id === activeUserId) || users[0];
+
+  // Controle de Modais e Visualização
   const [isViewingLandingPage, setIsViewingLandingPage] = useState<boolean>(false);
+  const [isCompanyModalOpen, setIsCompanyModalOpen] = useState<boolean>(false);
+  const [isCompetenceModalOpen, setIsCompetenceModalOpen] = useState<boolean>(false);
+
+  // Status de Sincronização Automática com Supabase
+  const [autoSyncState, setAutoSyncState] = useState<AutoSyncState>({
+    status: 'SYNCED',
+    lastSyncedAt: new Date(),
+    tablesCount: 13,
+  });
+
+  // Temporizador de Sessão e Logout por Inatividade
+  const [lastActivityTime, setLastActivityTime] = useState<number>(Date.now());
+  const [sessionMinutesRemaining, setSessionMinutesRemaining] = useState<number>(customization.sessionTimeoutMinutes || 30);
+
+  // Toast Notificação
+  const [toastMessage, setToastMessage] = useState<string | null>(null);
+
+  const showToast = (msg: string) => {
+    setToastMessage(msg);
+    setTimeout(() => setToastMessage(null), 4000);
+  };
+
+  const handleLogout = () => {
+    setIsAuthenticated(false);
+    showToast('Sessão encerrada com sucesso.');
+  };
+
+  // Monitoramento de inatividade para expiração da sessão
+  useEffect(() => {
+    if (!isAuthenticated) return;
+
+    const resetActivity = () => {
+      setLastActivityTime(Date.now());
+    };
+
+    const activityEvents = ['mousedown', 'keydown', 'scroll', 'touchstart'];
+    activityEvents.forEach(evt => window.addEventListener(evt, resetActivity));
+
+    const checkInterval = setInterval(() => {
+      const timeoutMinutes = customization.sessionTimeoutMinutes || 30;
+      const timeoutMs = timeoutMinutes * 60 * 1000;
+      const elapsed = Date.now() - lastActivityTime;
+      const remainingMs = timeoutMs - elapsed;
+
+      if (remainingMs <= 0) {
+        setIsAuthenticated(false);
+        showToast('Sua sessão expirou devido à inatividade. Faça login novamente para continuar.');
+      } else {
+        setSessionMinutesRemaining(Math.max(1, Math.ceil(remainingMs / 60000)));
+      }
+    }, 10000);
+
+    return () => {
+      activityEvents.forEach(evt => window.removeEventListener(evt, resetActivity));
+      clearInterval(checkInterval);
+    };
+  }, [isAuthenticated, lastActivityTime, customization.sessionTimeoutMinutes]);
+
+  // Guardião RBAC: redireciona caso o usuário não possua permissão para a aba ativa
+  useEffect(() => {
+    if (isAuthenticated && activeUser && activeUser.role !== 'ADMINISTRADOR') {
+      const roleConfig = rolePermissions.find(r => r.role === activeUser.role);
+      if (roleConfig && !roleConfig.allowedTabs.includes(activeTab)) {
+        setActiveTab(roleConfig.allowedTabs[0] || 'dashboard');
+      }
+    }
+  }, [activeTab, activeUser, rolePermissions, isAuthenticated]);
+
+  // Sincronização Automática em Background com o Supabase
+  useEffect(() => {
+    scheduleAutoSync(
+      {
+        companies,
+        documents,
+        entries,
+        accounts,
+        employees,
+        payslips,
+        partners,
+        distributions: profitDistributions,
+        obligations,
+        accountingParameters,
+        customization,
+        users,
+        userBacklog,
+      },
+      (state) => {
+        setAutoSyncState(state);
+      },
+      3000
+    );
+  }, [
+    companies,
+    documents,
+    entries,
+    accounts,
+    employees,
+    payslips,
+    partners,
+    profitDistributions,
+    obligations,
+    accountingParameters,
+    customization,
+    users,
+    userBacklog,
+  ]);
 
   // Dados filtrados e computados para a empresa ativa
   const companyPartners = partners.filter(p => p.companyId === selectedCompany.id);
@@ -138,31 +258,21 @@ export default function App() {
   const lucrosItem = balanceSheetCurrent.patrimonioLiquido.find(p => p.nome.toLowerCase().includes('lucro') || p.codigo.startsWith('2.3.02'));
   const saldoLucrosAcumulados = lucrosItem ? lucrosItem.saldo : 450000;
 
-  // Redefinir Dados de Demonstração
+  // Redefinir Dados de Demonstração (Demo)
   const handleResetDemoData = () => {
-    if (window.confirm('Tem certeza de que deseja restaurar os dados para os padrões iniciais de demonstração? Todas as apurações e alterações salvas localmente serão reiniciadas.')) {
-      localStorage.clear();
-      window.location.reload();
-    }
-  };
-
-  // Toast Notificação
-  const [toastMessage, setToastMessage] = useState<string | null>(null);
-
-  const showToast = (msg: string) => {
-    setToastMessage(msg);
-    setTimeout(() => setToastMessage(null), 4000);
+    localStorage.clear();
+    window.location.reload();
   };
 
   const addAuditLog = (acao: AuditLog['acao'], detalhes: string, entidade: AuditLog['entidade'] = 'DOCUMENTO_FISCAL') => {
     const newLog: AuditLog = {
       id: `audit-${Date.now()}`,
       companyId: selectedCompany.id,
-      usuario: office.responsavelNome,
-      entidade,
+      timestamp: new Date().toISOString(),
+      usuario: activeUser?.name || 'Carlos Mendes',
       acao,
       detalhes,
-      timestamp: new Date().toISOString(),
+      entidade,
     };
     setAuditLogs(prev => [newLog, ...prev]);
   };
@@ -171,9 +281,9 @@ export default function App() {
   const handleLogBacklog = (action: string, description: string, module: UserActivityBacklog['module']) => {
     const newEntry: UserActivityBacklog = {
       id: `backlog-${Date.now()}`,
-      userId: users[0]?.id || 'user-1',
-      userName: users[0]?.name || 'Carlos Mendes',
-      userRole: users[0]?.role || 'ADMINISTRADOR',
+      userId: activeUser?.id || 'user-faraujo',
+      userName: activeUser?.name || 'Administrador',
+      userRole: activeUser?.role || 'ADMINISTRADOR',
       action,
       description,
       module,
@@ -206,7 +316,7 @@ export default function App() {
     };
     setUsers(prev => [...prev, created]);
     addAuditLog('CRIAR_USUARIO', `Novo usuário cadastrado: ${created.name} (${created.role})`, 'SEGURANCA');
-    handleLogBacklog('CRIAR_USUARIO', `Usuário ${created.name} criado com perfil ${created.role}`, 'CONFIGURACOES');
+    handleLogBacklog('CRIAR_USUARIO', `Usuário ${created.name} criado com perfil ${created.role}`, 'USUARIOS');
     showToast(`Usuário ${created.name} adicionado com sucesso.`);
   };
 
@@ -214,8 +324,8 @@ export default function App() {
     setUsers(prev => prev.map(u => {
       if (u.id === userId) {
         const newStatus = !u.active;
-        addAuditLog('ATUALIZAR_USUARIO', `Status do usuário ${u.name} alterado para ${newStatus ? 'Ativo' : 'Inativo'}`, 'SEGURANCA');
-        handleLogBacklog('ALTERAR_STATUS_USUARIO', `Status de ${u.name} alterado para ${newStatus ? 'Ativo' : 'Inativo'}`, 'CONFIGURACOES');
+        addAuditLog('ATUALIZAR_USUARIO', `Status do usuário ${u.name} alterado para ${newStatus ? 'Ativo' : 'Bloqueado'}`, 'SEGURANCA');
+        handleLogBacklog('ALTERAR_STATUS_USUARIO', `Status de ${u.name} alterado para ${newStatus ? 'Ativo' : 'Bloqueado'}`, 'USUARIOS');
         showToast(`Status do usuário atualizado.`);
         return { ...u, active: newStatus };
       }
@@ -227,7 +337,7 @@ export default function App() {
     setUsers(prev => prev.map(u => {
       if (u.id === userId) {
         addAuditLog('ALTERAR_PERFIL', `Perfil de ${u.name} alterado para ${newRole}`, 'SEGURANCA');
-        handleLogBacklog('ALTERAR_PERFIL_USUARIO', `Perfil de ${u.name} alterado para ${newRole}`, 'CONFIGURACOES');
+        handleLogBacklog('ALTERAR_PERFIL_USUARIO', `Perfil de ${u.name} alterado para ${newRole}`, 'USUARIOS');
         showToast(`Perfil de ${u.name} alterado para ${newRole}.`);
         return { ...u, role: newRole };
       }
@@ -235,7 +345,123 @@ export default function App() {
     }));
   };
 
-  // 1. Fechar / Reabrir Competência
+  const handleDeleteUser = (userId: string) => {
+    if (userId === activeUser?.id) {
+      showToast('Você não pode excluir sua própria conta conectada.');
+      return;
+    }
+    const userToDelete = users.find(u => u.id === userId);
+    setUsers(prev => prev.filter(u => u.id !== userId));
+    addAuditLog('ATUALIZAR_USUARIO', `Usuário ${userToDelete?.name || userId} excluído`, 'SEGURANCA');
+    handleLogBacklog('EXCLUIR_USUARIO', `Usuário ${userToDelete?.name || userId} excluído`, 'USUARIOS');
+    showToast('Usuário excluído com sucesso.');
+  };
+
+  const handleUpdateUserPassword = (userId: string, newPassword: string, mustChangePassword: boolean = false) => {
+    setUsers(prev => prev.map(u => u.id === userId ? { ...u, password: newPassword, mustChangePassword } : u));
+    const userToUpdate = users.find(u => u.id === userId);
+    addAuditLog('ATUALIZAR_USUARIO', `Senha redefinida para ${userToUpdate?.name || userId}${mustChangePassword ? ' (Troca obrigatória no 1º acesso)' : ''}`, 'SEGURANCA');
+    handleLogBacklog('REDEFINIR_SENHA', `Senha redefinida para ${userToUpdate?.name || userId}`, 'USUARIOS');
+    showToast('Senha atualizada com sucesso.');
+  };
+
+  const handleUpdateRolePermissions = (newPermissions: RolePermissionConfig[]) => {
+    setRolePermissions(newPermissions);
+    addAuditLog('PARAMETRIZACAO', 'Matriz de permissões dos perfis (RBAC) atualizada pelo Administrador', 'SEGURANCA');
+    handleLogBacklog('ATUALIZAR_PERFIS', 'Permissões dos perfis de acesso atualizadas', 'USUARIOS');
+    showToast('Permissões dos perfis atualizadas com sucesso.');
+  };
+
+  const handleUpdatePasswordAndLogin = (userId: string, newPassword: string) => {
+    setUsers(prev => prev.map(u => {
+      if (u.id === userId) {
+        return { ...u, password: newPassword, mustChangePassword: false };
+      }
+      return u;
+    }));
+    const foundUser = users.find(u => u.id === userId);
+    if (foundUser) {
+      const updatedUser = { ...foundUser, password: newPassword, mustChangePassword: false };
+      setActiveUserId(updatedUser.id);
+      setIsAuthenticated(true);
+      setLastActivityTime(Date.now());
+      addAuditLog('ATUALIZAR_USUARIO', `Usuário ${updatedUser.name} cadastrou nova senha pessoal no primeiro acesso`, 'SEGURANCA');
+      handleLogBacklog('PRIMEIRO_ACESSO', `Senha definitiva cadastrada no primeiro acesso por ${updatedUser.name}`, 'USUARIOS');
+      showToast(`Senha pessoal cadastrada com sucesso! Bem-vindo(a), ${updatedUser.name}!`);
+    }
+  };
+
+  // Handlers para Gestão de Empresas
+  const handleAddCompany = (newComp: Omit<Company, 'id'>) => {
+    const created: Company = {
+      ...newComp,
+      id: `comp-${Date.now()}`,
+    };
+    setCompanies(prev => [...prev, created]);
+    setSelectedCompany(created);
+    handleLogBacklog('CRIAR_EMPRESA', `Empresa ${created.razaoSocial} cadastrada`, 'CONFIGURACOES');
+    showToast(`Empresa "${created.razaoSocial}" cadastrada com sucesso!`);
+  };
+
+  const handleUpdateCompany = (updatedCompany: Company) => {
+    setCompanies(prev => prev.map(c => c.id === updatedCompany.id ? updatedCompany : c));
+    handleLogBacklog('EDITAR_EMPRESA', `Empresa ${updatedCompany.razaoSocial} atualizada`, 'CONFIGURACOES');
+    showToast(`Dados fiscais da empresa ${updatedCompany.nomeFantasia || updatedCompany.razaoSocial} atualizados.`);
+  };
+
+  const handleToggleCompanyStatus = (companyId: string) => {
+    setCompanies(prev => prev.map(c => c.id === companyId ? { ...c, ativo: !c.ativo } : c));
+    showToast('Status da empresa atualizado.');
+  };
+
+  const handleDeleteCompany = (companyId: string) => {
+    if (companies.length <= 1) {
+      showToast('Não é possível excluir a única empresa cadastrada.');
+      return;
+    }
+    const comp = companies.find(c => c.id === companyId);
+    setCompanies(prev => prev.filter(c => c.id !== companyId));
+    if (selectedCompanyId === companyId) {
+      const remaining = companies.filter(c => c.id !== companyId);
+      if (remaining[0]) setSelectedCompanyId(remaining[0].id);
+    }
+    handleLogBacklog('EXCLUIR_EMPRESA', `Empresa ${comp?.razaoSocial || companyId} removida`, 'CONFIGURACOES');
+    showToast('Empresa excluída com sucesso.');
+  };
+
+  // Handlers para Competências Contábeis
+  const handleAddCompetence = (year: number, month: number) => {
+    const monthStr = month < 10 ? `0${month}` : `${month}`;
+    const label = `${monthStr}/${year}`;
+    const exists = competences.some(c => c.companyId === selectedCompany.id && c.year === year && c.month === month);
+    if (exists) {
+      showToast(`Competência ${label} já está cadastrada.`);
+      return;
+    }
+    const newComp: Competence = {
+      id: `comp-${selectedCompany.id}-${year}-${monthStr}`,
+      companyId: selectedCompany.id,
+      month,
+      year,
+      status: 'ABERTA',
+    };
+    setCompetences(prev => [...prev, newComp]);
+    setSelectedCompetence(label);
+    showToast(`Competência ${label} aberta com sucesso.`);
+  };
+
+  const handleToggleCompetenceStatusObj = (compObj: Competence) => {
+    setCompetences(prev => prev.map(c => {
+      if (c.id === compObj.id) {
+        const newStatus = c.status === 'ABERTA' ? 'FECHADA' : 'ABERTA';
+        addAuditLog('FECHAR', `Status da competência ${c.month}/${c.year} alterado para ${newStatus}`, 'COMPETENCIA');
+        showToast(`Competência ${c.month}/${c.year} ${newStatus === 'FECHADA' ? 'fechada' : 'reaberta'}.`);
+        return { ...c, status: newStatus };
+      }
+      return c;
+    }));
+  };
+
   const handleToggleCompetenceStatus = () => {
     const [mesStr, anoStr] = selectedCompetence.split('/');
     const month = parseInt(mesStr, 10);
@@ -266,21 +492,20 @@ export default function App() {
     });
   };
 
-  // 2. Importação de Documento Fiscal
+  // Importação e Exclusão de Documentos Fiscais
   const handleImportDocument = (newDoc: FiscalDocument) => {
     setDocuments(prev => [newDoc, ...prev]);
     addAuditLog('IMPORTAR_XML', `Importação de ${newDoc.tipoDoc} nº ${newDoc.numero} (${newDoc.tipoOperacao}) - Chave: ${newDoc.chaveAcesso.slice(0, 16)}...`, 'DOCUMENTO_FISCAL');
     showToast(`Documento ${newDoc.tipoDoc} nº ${newDoc.numero} importado com sucesso.`);
   };
 
-  // 3. Exclusão de Documento
   const handleDeleteDocument = (docId: string) => {
     setDocuments(prev => prev.filter(d => d.id !== docId));
     addAuditLog('EXCLUIR', `Exclusão de documento fiscal ID ${docId}`, 'DOCUMENTO_FISCAL');
     showToast('Documento fiscal excluído do sistema.');
   };
 
-  // 4. Apuração Tributária
+  // Apuração Tributária
   const currentAssessment = assessments.find(
     a => a.companyId === selectedCompany.id && a.competencia === selectedCompetence
   );
@@ -299,7 +524,7 @@ export default function App() {
     handleSaveAssessment(res);
   };
 
-  // 5. Contabilização Automática por Regras
+  // Contabilização Automática por Regras
   const handleAutoJournalize = () => {
     const compDocs = documents.filter(d => d.companyId === selectedCompany.id);
     const { newEntries, updatedDocs } = autoJournalizeFiscalDocuments(
@@ -342,25 +567,19 @@ export default function App() {
     }
   };
 
-  // 6. Novo Lançamento Manual
+  // Lançamentos Manuais e Plano de Contas
   const handleAddManualEntry = (entry: AccountingEntry) => {
     setEntries(prev => [entry, ...prev]);
     addAuditLog('CRIAR', `Lançamento manual #${entry.numero} registrado (Total: R$ ${entry.totalDebito.toFixed(2)})`, 'LANCAMENTO_CONTABIL');
     showToast(`Lançamento #${entry.numero} registrado.`);
   };
 
-  // 7. Nova Conta no Plano de Contas
   const handleAddAccount = (acc: AccountingAccount) => {
     setAccounts(prev => [...prev, acc]);
     showToast(`Conta ${acc.codigo} - ${acc.nome} adicionada ao plano de contas.`);
   };
 
-  const handleUpdateCompany = (updatedCompany: Company) => {
-    setCompanies(prev => prev.map(c => c.id === updatedCompany.id ? updatedCompany : c));
-    showToast(`Dados fiscais da empresa ${updatedCompany.nomeFantasia || updatedCompany.razaoSocial} atualizados.`);
-  };
-
-  // 8. Folha de Pagamento
+  // Folha de Pagamento & eSocial
   const handleAddEmployee = (emp: Employee) => {
     setEmployees(prev => [emp, ...prev]);
     showToast(`Colaborador ${emp.nome} cadastrado com sucesso.`);
@@ -380,7 +599,6 @@ export default function App() {
     showToast('Redirecionado para Central de Transmissões do eSocial.');
   };
 
-  // 8.1 Contabilização Automática da Folha de Pagamento em Partidas Dobradas
   const handleJournalizePayroll = () => {
     const compPayslips = payslips.filter(p => p.competencia === selectedCompetence);
     if (compPayslips.length === 0) {
@@ -406,28 +624,26 @@ export default function App() {
     showToast(`Folha de pagamento de ${selectedCompetence} contabilizada no Diário Geral com sucesso!`);
   };
 
-  // 8.2 Gestão de Sócios e Pró-labore
+  // Sócios e Distribuição de Lucros
   const handleAddPartner = (newPartner: Partner) => {
     setPartners(prev => [newPartner, ...prev]);
     addAuditLog('CRIAR', `Sócio ${newPartner.nome} cadastrado no QSA (${newPartner.participacaoCapitalPercent}% de cota).`, 'FOLHA');
     showToast(`Sócio ${newPartner.nome} incluído no quadro societário!`);
   };
 
-  // 8.3 Distribuição de Lucros Isentos com Escrituração e Contabilização Automática
   const handleDistributeProfits = (distData: Omit<ProfitDistributionRecord, 'id' | 'saldoLucrosDisponivelDepois' | 'reciboNumero' | 'statusContabilizacao'>) => {
     const nextReciboNum = `REC-LUC-${selectedCompetence.replace('/', '')}-${Math.floor(1000 + Math.random() * 9000)}`;
     const saldoDepois = Math.max(0, distData.saldoLucrosDisponivelAntes - distData.valorDistribuido);
     const newRecord: ProfitDistributionRecord = {
       ...distData,
-      id: `dist-${Date.now()}`,
-      saldoLucrosDisponivelDepois: saldoDepois,
+      id: `pdist-${Date.now()}`,
       reciboNumero: nextReciboNum,
+      saldoLucrosDisponivelDepois: saldoDepois,
       statusContabilizacao: 'CONTABILIZADO',
     };
 
     setProfitDistributions(prev => [newRecord, ...prev]);
 
-    // Contabilização automática imediata da distribuição de lucros
     const nextNum = entries.length > 0 ? Math.max(...entries.map(e => e.numero)) + 1 : 1001;
     const entry = autoJournalizeProfitDistribution(selectedCompany.id, newRecord, accounts, nextNum);
 
@@ -443,14 +659,14 @@ export default function App() {
     showToast(`Distribuição de Lucros para ${distData.partnerNome} efetuada e contabilizada no Diário!`);
   };
 
-  // 9. Obrigações e SPED
+  // Obrigações e SPED
   const handleMarkObligationDelivered = (oblId: string, protocol: string) => {
     setObligations(prev => prev.map(o => o.id === oblId ? { ...o, status: 'TRANSMITIDO', protocolo: protocol } : o));
     addAuditLog('TRANSMITIR', `Obrigação ID ${oblId} marcada como transmitida. Protocolo: ${protocol}`, 'SPED');
     showToast('Obrigação registrada como entregue.');
   };
 
-  // 10. Certificados e Transmissões
+  // Certificados e Transmissões
   const companyCertificate = certificates.find(c => c.companyId === selectedCompany.id);
 
   const handleAddCertificate = (newCert: DigitalCertificate) => {
@@ -510,6 +726,25 @@ export default function App() {
     o => o.status === 'PENDENTE'
   ).length;
 
+  // PORTAL DE LOGIN: Se o usuário não estiver autenticado, exibe a tela de login
+  if (!isAuthenticated) {
+    return (
+      <LoginView
+        users={users}
+        customization={customization}
+        onLoginSuccess={(user) => {
+          setActiveUserId(user.id);
+          setIsAuthenticated(true);
+          setLastActivityTime(Date.now());
+          addAuditLog('ATUALIZAR_USUARIO', `Usuário ${user.name} efetuou login no sistema`, 'SEGURANCA');
+          handleLogBacklog('LOGIN', `Login efetuado com sucesso por ${user.name}`, 'USUARIOS');
+          showToast(`Bem-vindo(a), ${user.name}!`);
+        }}
+        onUpdatePasswordAndLogin={handleUpdatePasswordAndLogin}
+      />
+    );
+  }
+
   // Renderização da Landing Page Profissional quando solicitada
   if (isViewingLandingPage) {
     return (
@@ -522,7 +757,7 @@ export default function App() {
 
   return (
     <div className="min-h-screen bg-[#F1F5F9] text-slate-900 flex flex-col font-sans selection:bg-blue-600 selection:text-white">
-      {/* Header com Escritório Contábil, Empresa Ativa e Competência */}
+      {/* Header com Escritório Contábil, Empresa Ativa, Competência e Sincronização */}
       <Header
         office={office}
         companies={companies}
@@ -532,11 +767,13 @@ export default function App() {
         selectedCompetence={selectedCompetence}
         onSelectCompetence={setSelectedCompetence}
         onToggleCompetenceStatus={handleToggleCompetenceStatus}
-        onResetData={handleResetDemoData}
-        onOpenSupabase={() => setActiveTab('supabase')}
         customization={customization}
-        activeUser={users[0]}
-        onOpenLandingPage={() => setIsViewingLandingPage(true)}
+        activeUser={activeUser}
+        onLogout={handleLogout}
+        onOpenCompanyModal={() => setIsCompanyModalOpen(true)}
+        onOpenCompetenceModal={() => setIsCompetenceModalOpen(true)}
+        autoSyncState={autoSyncState}
+        sessionMinutesRemaining={sessionMinutesRemaining}
       />
 
       {/* Main Container com Barra Lateral e Conteúdo */}
@@ -547,6 +784,10 @@ export default function App() {
           pendingDocsCount={pendingDocsCount}
           pendingObligationsCount={pendingObligationsCount}
           customization={customization}
+          activeUser={activeUser}
+          rolePermissions={rolePermissions}
+          onLogout={handleLogout}
+          onOpenCompanyModal={() => setIsCompanyModalOpen(true)}
           onOpenLandingPage={() => setIsViewingLandingPage(true)}
         />
 
@@ -696,6 +937,7 @@ export default function App() {
               customization={customization}
               onSaveCustomization={handleSaveCustomization}
               onOpenLandingPage={() => setIsViewingLandingPage(true)}
+              onResetData={handleResetDemoData}
             />
           )}
 
@@ -705,12 +947,52 @@ export default function App() {
               onAddUser={handleAddUser}
               onToggleUserStatus={handleToggleUserStatus}
               onChangeUserRole={handleChangeUserRole}
+              onDeleteUser={handleDeleteUser}
+              onUpdateUserPassword={handleUpdateUserPassword}
+              activeUserId={activeUser.id}
               backlog={userBacklog}
               onLogActivity={handleLogBacklog}
+              rolePermissions={rolePermissions}
+              onUpdateRolePermissions={handleUpdateRolePermissions}
             />
           )}
         </main>
       </div>
+
+      {/* Modal de Gestão Completa de Empresas Clientes */}
+      {isCompanyModalOpen && (
+        <CompanyManagementModal
+          isOpen={isCompanyModalOpen}
+          companies={companies}
+          selectedCompanyId={selectedCompanyId}
+          onSelectCompany={(c) => {
+            setSelectedCompany(c);
+            setIsCompanyModalOpen(false);
+          }}
+          onAddCompany={handleAddCompany}
+          onUpdateCompany={handleUpdateCompany}
+          onToggleCompanyStatus={handleToggleCompanyStatus}
+          onDeleteCompany={handleDeleteCompany}
+          onClose={() => setIsCompanyModalOpen(false)}
+        />
+      )}
+
+      {/* Modal de Gestão Completa de Competências Contábeis */}
+      {isCompetenceModalOpen && (
+        <CompetenceManagementModal
+          isOpen={isCompetenceModalOpen}
+          company={selectedCompany}
+          competences={competences}
+          selectedCompetence={selectedCompetence}
+          onSelectCompetence={(compLabel) => {
+            setSelectedCompetence(compLabel);
+            setIsCompetenceModalOpen(false);
+          }}
+          onAddCompetence={handleAddCompetence}
+          onToggleStatus={handleToggleCompetenceStatusObj}
+          onClose={() => setIsCompetenceModalOpen(false)}
+        />
+      )}
 
       {/* Footer Profissional */}
       <footer className="h-10 bg-white border-t border-slate-200 flex items-center justify-between px-6 md:px-8 text-[11px] text-slate-500 font-medium tracking-wide shrink-0">
@@ -720,7 +1002,7 @@ export default function App() {
             Sistema Conectado (ICP-Brasil & SEFAZ)
           </span>
           <span className="hidden sm:inline text-slate-300">|</span>
-          <span className="hidden sm:inline">V. 2.0.0-fase3</span>
+          <span className="hidden sm:inline">V. 2.5.0 • Audicon Compliance</span>
         </div>
         <div className="flex items-center gap-6">
           <span className="hidden sm:inline">Suporte Central: {customization.supportPhone}</span>

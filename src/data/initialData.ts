@@ -16,7 +16,8 @@ import {
   AccountingParameters,
   SystemCustomization,
   SystemUser,
-  UserActivityBacklog
+  UserActivityBacklog,
+  RolePermissionConfig
 } from '../types';
 
 export const initialOffice: OfficeTenant = {
@@ -972,6 +973,7 @@ export const initialCustomization: SystemCustomization = {
   primaryThemeColor: 'blue',
   supportEmail: 'contato@audicon.cnt.br',
   supportPhone: '(11) 3456-7890',
+  sessionTimeoutMinutes: 30,
   landingPage: {
     heroBadge: 'Tecnologia Contábil 2026 • SPED, Fator R & Supabase Cloud',
     heroTitle: 'Contabilidade Consultiva & Automação Fiscal de Alta Fidelidade',
@@ -980,7 +982,7 @@ export const initialCustomization: SystemCustomization = {
     ctaSecondaryText: 'Ver Demonstração dos Módulos',
     stat1Number: '100%',
     stat1Label: 'Conformidade Fiscal',
-    stat2Number: '9 Tabelas',
+    stat2Number: '13 Tabelas',
     stat2Label: 'Sincronizadas em Nuvem',
     stat3Number: '< 3 seg',
     stat3Label: 'Geração EFD & ECD',
@@ -993,6 +995,18 @@ export const initialSystemCustomization = initialCustomization;
 
 export const initialSystemUsers: SystemUser[] = [
   {
+    id: 'user-admin-faraujo',
+    name: 'F. Araújo',
+    email: 'faraujo@gmail.com',
+    role: 'ADMINISTRADOR',
+    department: 'Diretoria & Gestão Geral',
+    active: true,
+    avatarColor: 'bg-indigo-600',
+    password: 'Admin#2026!Sec@',
+    lastLogin: '2026-09-05T21:40:00Z',
+    createdAt: '2026-09-05T21:00:00Z',
+  },
+  {
     id: 'user-1',
     name: 'Carlos Eduardo Silva',
     email: 'carlos.silva@audicon.cnt.br',
@@ -1000,6 +1014,7 @@ export const initialSystemUsers: SystemUser[] = [
     department: 'Diretoria Técnica & Contábil',
     active: true,
     avatarColor: 'bg-blue-600',
+    password: 'Admin#2026!Sec@',
     lastLogin: '2026-09-05T19:45:00Z',
     createdAt: '2026-01-15T08:00:00Z',
   },
@@ -1011,6 +1026,7 @@ export const initialSystemUsers: SystemUser[] = [
     department: 'Depto Fiscal & Tributário',
     active: true,
     avatarColor: 'bg-emerald-600',
+    password: 'Analista#2026!@',
     lastLogin: '2026-09-05T18:30:00Z',
     createdAt: '2026-02-01T09:00:00Z',
   },
@@ -1022,6 +1038,7 @@ export const initialSystemUsers: SystemUser[] = [
     department: 'Depto Contábil & SPED',
     active: true,
     avatarColor: 'bg-indigo-600',
+    password: 'Analista#2026!@',
     lastLogin: '2026-09-05T17:15:00Z',
     createdAt: '2026-02-15T08:30:00Z',
   },
@@ -1033,6 +1050,7 @@ export const initialSystemUsers: SystemUser[] = [
     department: 'Processamento & Folha',
     active: true,
     avatarColor: 'bg-amber-600',
+    password: 'Operador#2026!@',
     lastLogin: '2026-09-05T16:00:00Z',
     createdAt: '2026-03-01T10:00:00Z',
   },
@@ -1044,6 +1062,7 @@ export const initialSystemUsers: SystemUser[] = [
     department: 'Recepção de Documentos',
     active: false,
     avatarColor: 'bg-slate-600',
+    password: 'Operador#2026!@',
     lastLogin: '2026-08-20T11:00:00Z',
     createdAt: '2026-04-10T14:00:00Z',
   },
@@ -1112,3 +1131,57 @@ export const initialActivityBacklog: UserActivityBacklog[] = [
   },
 ];
 export const initialUserActivityBacklog = initialActivityBacklog;
+
+export const initialRolePermissions: RolePermissionConfig[] = [
+  {
+    role: 'ADMINISTRADOR',
+    roleName: 'Administrador do Sistema',
+    description: 'Acesso total e irrestrito a todos os módulos contábeis, fiscais, configurações e RBAC.',
+    badgeColor: 'bg-blue-600',
+    allowedTabs: [
+      'dashboard',
+      'fiscal',
+      'apuracao',
+      'contabil',
+      'folha',
+      'socios',
+      'sped',
+      'gov',
+      'certificados',
+      'auditoria',
+      'supabase',
+      'parametros',
+      'personalizacao',
+      'usuarios'
+    ],
+  },
+  {
+    role: 'ANALISTA',
+    roleName: 'Analista Fiscal & Contábil',
+    description: 'Operação de rotinas contábeis, apurações tributárias, folha de pagamento, sócios e SPED.',
+    badgeColor: 'bg-emerald-600',
+    allowedTabs: [
+      'dashboard',
+      'fiscal',
+      'apuracao',
+      'contabil',
+      'folha',
+      'socios',
+      'sped',
+      'gov',
+      'certificados',
+      'auditoria'
+    ],
+  },
+  {
+    role: 'OPERADOR',
+    roleName: 'Operador de Lançamentos',
+    description: 'Entrada operacional de documentos fiscais, conferência de XMLs e lançamentos contábeis básicos.',
+    badgeColor: 'bg-amber-600',
+    allowedTabs: [
+      'dashboard',
+      'fiscal',
+      'contabil'
+    ],
+  },
+];

@@ -10,7 +10,9 @@ import {
   Sparkles,
   Phone,
   Mail,
-  ShieldCheck
+  ShieldCheck,
+  Clock,
+  AlertTriangle
 } from 'lucide-react';
 import { SystemCustomization } from '../types';
 
@@ -18,16 +20,19 @@ interface CustomizationViewProps {
   customization: SystemCustomization;
   onSaveCustomization: (newCustom: SystemCustomization) => void;
   onOpenLandingPage: () => void;
+  onResetData?: () => void;
 }
 
 export const CustomizationView: React.FC<CustomizationViewProps> = ({
   customization,
   onSaveCustomization,
   onOpenLandingPage,
+  onResetData,
 }) => {
   const [formData, setFormData] = useState<SystemCustomization>(customization);
   const [savedSuccess, setSavedSuccess] = useState(false);
   const [activeTab, setActiveTab] = useState<'branding' | 'landing'>('branding');
+  const [showResetConfirm, setShowResetConfirm] = useState(false);
 
   const handleFieldChange = <K extends keyof SystemCustomization>(field: K, value: SystemCustomization[K]) => {
     setFormData(prev => ({
@@ -273,6 +278,63 @@ export const CustomizationView: React.FC<CustomizationViewProps> = ({
                 })}
               </div>
             </div>
+
+            {/* Configuração de Sessão e Segurança */}
+            <div className="border-t border-slate-100 pt-6">
+              <div className="flex items-center gap-2 mb-2">
+                <Clock className="w-4 h-4 text-indigo-600" />
+                <h3 className="text-sm font-bold text-slate-900">
+                  Segurança & Tempo Limite de Sessão
+                </h3>
+              </div>
+              <p className="text-xs text-slate-500 mb-4">
+                Define o tempo em minutos para desconexão automática (logout) por inatividade dos usuários.
+              </p>
+
+              <div className="max-w-xs">
+                <label className="block text-xs font-bold text-slate-800 mb-1">
+                  Tempo Limite por Sessão (minutos)
+                </label>
+                <div className="flex items-center gap-2">
+                  <input
+                    type="number"
+                    min={5}
+                    max={240}
+                    value={formData.sessionTimeoutMinutes || 30}
+                    onChange={e => handleFieldChange('sessionTimeoutMinutes', Math.max(5, parseInt(e.target.value) || 30))}
+                    className="w-32 text-xs font-bold px-3 py-2 bg-white border border-slate-300 rounded-md focus:ring-1 focus:ring-indigo-500 text-slate-900"
+                  />
+                  <span className="text-xs text-slate-500 font-semibold">minutos de inatividade</span>
+                </div>
+                <p className="text-[10px] text-slate-400 mt-1">
+                  Recomendado para conformidade LGPD e segurança contábil: entre 15 e 60 minutos.
+                </p>
+              </div>
+            </div>
+
+            {/* Restauração dos Dados de Demonstração (Demo) */}
+            {onResetData && (
+              <div className="border-t border-slate-100 pt-6">
+                <div className="flex items-center gap-2 mb-2">
+                  <RotateCcw className="w-4 h-4 text-amber-600" />
+                  <h3 className="text-sm font-bold text-slate-900">
+                    Restauração de Dados de Demonstração (Demo)
+                  </h3>
+                </div>
+                <p className="text-xs text-slate-500 mb-4">
+                  Caso deseje retornar o ambiente para o estado inicial de fábrica da demonstração com todas as empresas e lançamentos de exemplo.
+                </p>
+
+                <button
+                  type="button"
+                  onClick={() => setShowResetConfirm(true)}
+                  className="px-4 py-2 text-xs font-bold text-amber-700 bg-amber-50 hover:bg-amber-100 border border-amber-200 rounded-lg flex items-center gap-2 cursor-pointer transition-colors"
+                >
+                  <RotateCcw className="w-3.5 h-3.5 text-amber-600" />
+                  Restaurar Banco de Demonstração Original
+                </button>
+              </div>
+            )}
           </div>
         )}
 
@@ -426,6 +488,50 @@ export const CustomizationView: React.FC<CustomizationViewProps> = ({
           </div>
         )}
       </div>
+
+      {/* Modal de Confirmação para Restaurar Demo */}
+      {showResetConfirm && (
+        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="bg-white rounded-xl shadow-xl max-w-sm w-full p-6 space-y-4 animate-in fade-in zoom-in-95">
+            <div className="flex items-center gap-3">
+              <div className="p-2.5 bg-amber-100 text-amber-600 rounded-xl">
+                <AlertTriangle className="w-6 h-6" />
+              </div>
+              <div>
+                <h3 className="text-sm font-bold text-slate-900">Restaurar Banco Demo</h3>
+                <p className="text-xs text-slate-500">Atenção aos dados não sincronizados</p>
+              </div>
+            </div>
+
+            <p className="text-xs text-slate-600 leading-relaxed">
+              Deseja realmente restaurar os dados de demonstração iniciais? Isso reiniciará as empresas, planos de contas e parâmetros para o modelo padrão da demonstração.
+            </p>
+
+            <div className="pt-2 flex items-center justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => setShowResetConfirm(false)}
+                className="px-3 py-1.5 text-xs font-semibold text-slate-600 hover:bg-slate-100 rounded-lg cursor-pointer"
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  if (onResetData) {
+                    onResetData();
+                  }
+                  setShowResetConfirm(false);
+                }}
+                className="px-4 py-1.5 text-xs font-bold text-white bg-amber-600 hover:bg-amber-700 rounded-lg shadow-sm cursor-pointer flex items-center gap-1.5"
+              >
+                <RotateCcw className="w-3.5 h-3.5" />
+                Sim, Restaurar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
