@@ -41,7 +41,8 @@ import {
   UserActivityBacklog,
   SystemRole,
   RolePermissionConfig,
-  OfficeTenant
+  OfficeTenant,
+  SystemModuleId
 } from './types';
 import { Header } from './components/Header';
 import { Sidebar, TabId } from './components/Sidebar';
@@ -171,6 +172,7 @@ export default function App() {
   const [competences, setCompetences] = useLocalStorageState<Competence[]>('saas_contabil_competences', initialCompetences);
   const [selectedCompetence, setSelectedCompetence] = useLocalStorageState<string>('saas_contabil_selected_competence', '09/2026');
   const [activeTab, setActiveTab] = useLocalStorageState<TabId>('saas_contabil_active_tab', 'dashboard');
+  const [activeModule, setActiveModule] = useLocalStorageState<SystemModuleId>('saas_contabil_active_module', 'ALL');
 
   // Dados do Domínio com Persistência Local Real (Preservados após F5)
   const [documents, setDocuments] = useLocalStorageState<FiscalDocument[]>('saas_contabil_documents', initialFiscalDocuments);
@@ -895,6 +897,8 @@ export default function App() {
         onOpenCompetenceModal={() => setIsCompetenceModalOpen(true)}
         autoSyncState={autoSyncState}
         sessionMinutesRemaining={sessionMinutesRemaining}
+        activeModule={activeModule}
+        onSelectModule={setActiveModule}
       />
 
       {/* Main Container com Barra Lateral e Conteúdo */}
@@ -907,6 +911,8 @@ export default function App() {
           customization={customization}
           activeUser={activeUser}
           rolePermissions={rolePermissions}
+          activeModule={activeModule}
+          onSelectModule={setActiveModule}
           onLogout={handleLogout}
           onOpenCompanyModal={() => setIsCompanyModalOpen(true)}
           onOpenLandingPage={() => setIsViewingLandingPage(true)}
@@ -947,6 +953,7 @@ export default function App() {
               currentAssessment={currentAssessment}
               onSaveAssessment={handleSaveAssessment}
               onUpdateCompany={handleUpdateCompany}
+              onAutoJournalize={handleAutoJournalize}
             />
           )}
 

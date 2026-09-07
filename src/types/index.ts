@@ -183,10 +183,129 @@ export interface TaxAssessment {
     aliquota: number;
     valorApurado: number;
   };
+  irpj?: {
+    baseCalculo: number;
+    percentualPresuncao: number;
+    baseTributavel: number;
+    aliquota: number;
+    valorApurado: number;
+    adicional10: number;
+    valorTotalDevido: number;
+  };
+  csll?: {
+    baseCalculo: number;
+    percentualPresuncao: number;
+    baseTributavel: number;
+    aliquota: number;
+    valorApurado: number;
+  };
+  iss?: {
+    baseCalculo: number;
+    aliquota: number;
+    valorApurado: number;
+  };
+  retencoes?: {
+    baseCalculo: number;
+    crfRetido: number; // 4.65% (PIS, COFINS, CSLL)
+    irrfRetido: number; // 1.5%
+    totalRetido: number;
+  };
   
   // Guias geradas
   guias: TaxGuide[];
 }
+
+// Configurações do Processo de Cálculo Calima (mlf/calcularImpostoProcessView)
+export interface CalimaProcessConfig {
+  selectedTaxes: string[]; // 'DAS', 'ICMS', 'PIS', 'COFINS', 'IRPJ', 'CSLL', 'ISS', 'RETENCOES'
+  recalculateDocs: boolean;
+  validateConsistencies: boolean;
+  considerPreviousCredit: boolean;
+  generateAccountingJournal: boolean;
+  updateCompetenceStatus: boolean;
+  saldoCredorIcmsAnterior: number;
+}
+
+export type TabId = 
+  | 'dashboard' 
+  | 'fiscal' 
+  | 'apuracao' 
+  | 'contabil' 
+  | 'folha' 
+  | 'socios' 
+  | 'sped' 
+  | 'gov' 
+  | 'certificados' 
+  | 'auditoria' 
+  | 'supabase'
+  | 'parametros'
+  | 'personalizacao'
+  | 'usuarios';
+
+// Módulos Arquiteturais do Sistema (MLF, MLC, MLP, Governança)
+export type SystemModuleId = 'ALL' | 'FISCAL' | 'CONTABIL' | 'FOLHA' | 'GESTAO';
+
+export interface SystemModuleInfo {
+  id: SystemModuleId;
+  code: string;
+  name: string;
+  shortName: string;
+  description: string;
+  badgeColor: string;
+  allowedTabs: TabId[];
+}
+
+export const SYSTEM_MODULES: SystemModuleInfo[] = [
+  {
+    id: 'ALL',
+    code: 'GERAL',
+    name: 'Todos os Módulos',
+    shortName: 'Geral',
+    description: 'Visão integrada de todos os processos do escritório',
+    badgeColor: 'bg-slate-700 text-slate-200 border-slate-600',
+    allowedTabs: [
+      'dashboard', 'fiscal', 'apuracao', 'contabil', 'folha', 'socios',
+      'sped', 'gov', 'certificados', 'auditoria', 'supabase',
+      'parametros', 'personalizacao', 'usuarios'
+    ],
+  },
+  {
+    id: 'FISCAL',
+    code: 'MLF',
+    name: 'Módulo Fiscal (MLF)',
+    shortName: 'Fiscal (MLF)',
+    description: 'Cálculo de impostos, escrituração de NF-e/NFC-e e SPED Fiscal',
+    badgeColor: 'bg-amber-500/20 text-amber-300 border-amber-500/30',
+    allowedTabs: ['apuracao', 'fiscal', 'sped'],
+  },
+  {
+    id: 'CONTABIL',
+    code: 'MLC',
+    name: 'Módulo Contábil (MLC)',
+    shortName: 'Contábil (MLC)',
+    description: 'Plano de contas, partidas dobradas, razão, diário e balancetes',
+    badgeColor: 'bg-blue-500/20 text-blue-300 border-blue-500/30',
+    allowedTabs: ['contabil', 'parametros'],
+  },
+  {
+    id: 'FOLHA',
+    code: 'MLP',
+    name: 'Folha de Pagamento (MLP)',
+    shortName: 'Folha (MLP)',
+    description: 'Holerites, encargos INSS/FGTS, eSocial e pró-labore com Fator R',
+    badgeColor: 'bg-emerald-500/20 text-emerald-300 border-emerald-500/30',
+    allowedTabs: ['folha', 'socios'],
+  },
+  {
+    id: 'GESTAO',
+    code: 'ADM',
+    name: 'Governança & Gestão',
+    shortName: 'Governança',
+    description: 'Painel gerencial, auditoria, transmissão GOV, certificados e usuários',
+    badgeColor: 'bg-purple-500/20 text-purple-300 border-purple-500/30',
+    allowedTabs: ['dashboard', 'gov', 'certificados', 'auditoria', 'supabase', 'personalizacao', 'usuarios'],
+  },
+];
 
 export interface TaxGuide {
   id: string;

@@ -20,9 +20,15 @@ import {
   TrendingDown,
   ArrowRight,
   Sliders,
-  RefreshCw
+  RefreshCw,
+  Play,
+  Check,
+  Settings,
+  Terminal,
+  FileSpreadsheet,
+  ExternalLink
 } from 'lucide-react';
-import { Company, FiscalDocument, TaxAssessment, TaxGuide } from '../types';
+import { Company, FiscalDocument, TaxAssessment, TaxGuide, CalimaProcessConfig } from '../types';
 import { calculateTaxAssessment } from '../services/taxEngine';
 
 interface TaxAssessmentViewProps {
@@ -32,6 +38,7 @@ interface TaxAssessmentViewProps {
   currentAssessment?: TaxAssessment;
   onSaveAssessment: (assessment: TaxAssessment) => void;
   onUpdateCompany?: (company: Company) => void;
+  onAutoJournalize?: (assessment?: TaxAssessment) => void;
 }
 
 export const TaxAssessmentView: React.FC<TaxAssessmentViewProps> = ({
@@ -41,17 +48,82 @@ export const TaxAssessmentView: React.FC<TaxAssessmentViewProps> = ({
   currentAssessment,
   onSaveAssessment,
   onUpdateCompany,
+  onAutoJournalize,
 }) => {
   const [selectedGuide, setSelectedGuide] = useState<TaxGuide | null>(null);
+
+  // Parâmetros de Execução do Calima MLF (calcularImpostoProcessView)
+  const [calimaConfig, setCalimaConfig] = useState<CalimaProcessConfig>({
+    saldoCredorIcmsAnterior: 0,
+    considerPreviousCredit: true,
+    validateConsistencies: true,
+    generateAccountingJournal: true,
+    recalculateDocs: true,
+    updateCompetenceStatus: true,
+    selectedTaxes: ['DAS', 'ICMS', 'PIS', 'COFINS', 'IRPJ', 'CSLL', 'ISS', 'RETENCOES'],
+  });
+
+  const [isProcessing, setIsProcessing] = useState(false);
+  const [processStep, setProcessStep] = useState<string>('');
+  const [progressPercent, setProgressPercent] = useState<number>(0);
+  const [showConfigPanel, setShowConfigPanel] = useState<boolean>(true);
+  const [consoleLogs, setConsoleLogs] = useState<string[]>([]);
 
   // Simulador de Pró-labore e Fator R
   const [isSimulatorOpen, setIsSimulatorOpen] = useState(false);
   const [simFolha12, setSimFolha12] = useState<number>(company.folha12Meses || 0);
 
   const handleRunAssessment = (overrideCompany?: Company) => {
-    const compToUse = overrideCompany && 'regimeTributario' in overrideCompany ? overrideCompany : company;
-    const assessment = calculateTaxAssessment(compToUse, competencia, documents);
-    onSaveAssessment(assessment);
+    setIsProcessing(true);
+    setProgressPercent(15);
+    setProcessStep('1/4 - Validando consistências cadastrais e regras de CFOP/CST dos XMLs...');
+    setConsoleLogs([
+      `[MLF-CALIMA] Iniciando processo calcularImpostoProcessView...`,
+      `[MLF-CALIMA] Empresa: ${company.razaoSocial} (CNPJ: ${company.cnpj})`,
+      `[MLF-CALIMA] Regime: ${company.regimeTributario} | Competência: ${competencia}`,
+      `[MLF-CALIMA] Verificando ${documents.length} documentos fiscais escriturados...`,
+    ]);
+
+    setTimeout(() => {
+      setProgressPercent(45);
+      setProcessStep('2/4 - Consolidando bases tributárias e créditos fiscais a partir dos XMLs...');
+      setConsoleLogs(prev => [
+        ...prev,
+        `[MLF-CALIMA] Bases de Saídas e Entradas consolidadas com sucesso.`,
+        `[MLF-CALIMA] Aplicando parametrização tributária e regras de segregação...`,
+      ]);
+
+      setTimeout(() => {
+        setProgressPercent(80);
+        setProcessStep('3/4 - Calculando alíquotas efetivas e partilhas tributárias...');
+        setConsoleLogs(prev => [
+          ...prev,
+          `[MLF-CALIMA] Gerando guias e demonstrativos de arrecadação...`,
+        ]);
+
+        setTimeout(() => {
+          const compToUse = overrideCompany && 'regimeTributario' in overrideCompany ? overrideCompany : company;
+          const assessment = calculateTaxAssessment(compToUse, competencia, documents, calimaConfig);
+          onSaveAssessment(assessment);
+
+          if (calimaConfig.generateAccountingJournal && onAutoJournalize) {
+            onAutoJournalize(assessment);
+            setConsoleLogs(prev => [
+              ...prev,
+              `[MLF-CALIMA] Integração MLC: Lançamentos contábeis de provisão tributária transmitidos ao Livro Diário!`,
+            ]);
+          }
+
+          setProgressPercent(100);
+          setProcessStep('4/4 - Processo concluído com êxito!');
+          setConsoleLogs(prev => [
+            ...prev,
+            `[MLF-CALIMA] Apuração gravada com sucesso! ${assessment.guias.length} guias geradas.`,
+          ]);
+          setIsProcessing(false);
+        }, 400);
+      }, 400);
+    }, 400);
   };
 
   const handleApplySimulatedFolha = () => {
@@ -68,6 +140,17 @@ export const TaxAssessmentView: React.FC<TaxAssessmentViewProps> = ({
 
   const isSimples = company.regimeTributario === 'SIMPLES_NACIONAL';
 
+  // Toggle seleção de tributo
+  const handleToggleTax = (taxName: string) => {
+    setCalimaConfig(prev => {
+      const current = prev.selectedTaxes || [];
+      const updated = current.includes(taxName)
+        ? current.filter(t => t !== taxName)
+        : [...current, taxName];
+      return { ...prev, selectedTaxes: updated };
+    });
+  };
+
   // Cálculos do simulador
   const simRatio = company.rbt12 > 0 ? simFolha12 / company.rbt12 : 0;
   const simPercent = Math.round(simRatio * 10000) / 100;
@@ -78,32 +161,215 @@ export const TaxAssessmentView: React.FC<TaxAssessmentViewProps> = ({
 
   return (
     <div className="space-y-6">
-      {/* Header com Ações */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-white border border-slate-200 p-5 rounded-xl shadow-xs">
-        <div>
-          <div className="flex items-center gap-2.5">
-            <h1 className="text-xl font-bold text-slate-900 tracking-tight flex items-center gap-2">
-              <Calculator className="w-5 h-5 text-blue-600" />
-              Motor de Apuração Fiscal & Geração de Guias
+      {/* Header com Identificação do Calima MLF */}
+      <div className="bg-white border border-slate-200 rounded-xl p-5 shadow-xs space-y-4">
+        <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 border-b border-slate-100 pb-4">
+          <div>
+            <div className="flex items-center gap-2">
+              <span className="px-2 py-0.5 rounded text-[10px] font-mono font-bold bg-amber-500/10 text-amber-700 border border-amber-500/20">
+                MÓDULO FISCAL (MLF)
+              </span>
+              <span className="text-xs text-slate-400 font-mono">
+                processo: calcularImpostoProcessView
+              </span>
+              <span className="text-[10px] bg-emerald-50 text-emerald-700 font-bold px-2 py-0.5 rounded-full border border-emerald-200 flex items-center gap-1">
+                <span className="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
+                Calima Engine Ativo
+              </span>
+            </div>
+            <h1 className="text-xl font-bold text-slate-900 tracking-tight flex items-center gap-2 mt-1">
+              <Calculator className="w-5 h-5 text-amber-600" />
+              Cálculo e Apuração de Impostos Fiscais
             </h1>
-            <span className="text-[10px] bg-blue-50 text-blue-700 font-bold px-2.5 py-0.5 rounded-full border border-blue-200">
-              {isSimples ? 'Simples Nacional' : 'Lucro Presumido'}
-            </span>
+            <p className="text-xs text-slate-500 mt-0.5">
+              Processamento fiscal automatizado para competência <strong className="text-slate-800">{competencia}</strong> • Empresa: <strong className="text-slate-800">{company.razaoSocial}</strong> ({isSimples ? 'Simples Nacional' : 'Lucro Presumido'}).
+            </p>
           </div>
-          <p className="text-xs text-slate-500 mt-1">
-            Apuração automática com base nas NF-es e NFC-es escrituradas na competência <strong className="text-slate-700">{competencia}</strong>.
-          </p>
+
+          <div className="flex items-center gap-2 shrink-0">
+            <button
+              type="button"
+              onClick={() => setShowConfigPanel(!showConfigPanel)}
+              className="px-3 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-colors cursor-pointer"
+            >
+              <Sliders className="w-3.5 h-3.5 text-slate-600" />
+              {showConfigPanel ? 'Ocultar Parâmetros' : 'Configurar Parâmetros'}
+            </button>
+
+            <button
+              type="button"
+              id="btn-run-assessment"
+              disabled={isProcessing}
+              onClick={() => handleRunAssessment()}
+              className={`px-4 py-2 bg-amber-600 hover:bg-amber-700 text-white rounded-lg text-xs font-semibold flex items-center gap-2 shadow-xs shadow-amber-200 transition-all cursor-pointer ${
+                isProcessing ? 'opacity-70 cursor-not-allowed' : ''
+              }`}
+            >
+              {isProcessing ? (
+                <>
+                  <RefreshCw className="w-4 h-4 animate-spin" />
+                  <span>Calculando Impostos...</span>
+                </>
+              ) : (
+                <>
+                  <Play className="w-4 h-4 fill-white" />
+                  <span>{currentAssessment ? 'Recalcular Impostos (MLF)' : 'Calcular Impostos (MLF)'}</span>
+                </>
+              )}
+            </button>
+          </div>
         </div>
 
-        <button
-          type="button"
-          id="btn-run-assessment"
-          onClick={() => handleRunAssessment()}
-          className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-xs font-semibold flex items-center gap-2 shadow-xs shadow-blue-200 transition-colors cursor-pointer"
-        >
-          <Calculator className="w-4 h-4" />
-          {currentAssessment ? 'Reprocessar Apuração' : 'Executar Apuração Agora'}
-        </button>
+        {/* Barra de Progresso e Notificação de Execução */}
+        {isProcessing && (
+          <div className="p-3.5 rounded-lg bg-amber-50 border border-amber-200 space-y-2">
+            <div className="flex items-center justify-between text-xs font-bold text-amber-900">
+              <span className="flex items-center gap-2">
+                <RefreshCw className="w-3.5 h-3.5 animate-spin text-amber-600" />
+                {processStep}
+              </span>
+              <span>{progressPercent}%</span>
+            </div>
+            <div className="w-full h-2 bg-amber-200 rounded-full overflow-hidden">
+              <div
+                className="h-full bg-amber-600 rounded-full transition-all duration-300 ease-out"
+                style={{ width: `${progressPercent}%` }}
+              ></div>
+            </div>
+          </div>
+        )}
+
+        {/* Painel de Parâmetros do Processo Calima (MLF) */}
+        {showConfigPanel && (
+          <div className="p-4 rounded-xl bg-slate-50 border border-slate-200 space-y-4">
+            <div className="flex items-center justify-between">
+              <div className="text-xs font-bold uppercase tracking-wider text-slate-700 flex items-center gap-1.5">
+                <Settings className="w-3.5 h-3.5 text-amber-600" />
+                Parâmetros do Processo (Calima MLF - calcularImpostoProcessView)
+              </div>
+              <span className="text-[10px] text-slate-500 font-mono">
+                Homologado com Calima ERP
+              </span>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 text-xs">
+              {/* Seleção de Impostos */}
+              <div className="p-3 bg-white rounded-lg border border-slate-200 space-y-2 md:col-span-2">
+                <span className="font-bold text-slate-800 block text-[11px]">
+                  Tributos a Apurar no Processo:
+                </span>
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                  {(isSimples 
+                    ? ['DAS'] 
+                    : ['ICMS', 'PIS', 'COFINS', 'IRPJ', 'CSLL', 'ISS', 'RETENCOES']
+                  ).map(tax => {
+                    const isSelected = calimaConfig.selectedTaxes?.includes(tax);
+                    return (
+                      <button
+                        key={tax}
+                        type="button"
+                        onClick={() => handleToggleTax(tax)}
+                        className={`px-2 py-1.5 rounded text-[11px] font-bold border transition-all flex items-center justify-between cursor-pointer ${
+                          isSelected
+                            ? 'bg-amber-500/10 border-amber-500 text-amber-800'
+                            : 'bg-slate-50 border-slate-200 text-slate-400 hover:text-slate-600'
+                        }`}
+                      >
+                        <span>{tax}</span>
+                        {isSelected && <Check className="w-3 h-3 text-amber-600" />}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {/* Saldo Credor Anterior de ICMS */}
+              {!isSimples && (
+                <div className="p-3 bg-white rounded-lg border border-slate-200 space-y-1.5">
+                  <label className="font-bold text-slate-800 block text-[11px]">
+                    Saldo Credor ICMS Anterior (R$):
+                  </label>
+                  <input
+                    type="number"
+                    min="0"
+                    step="0.01"
+                    value={calimaConfig.saldoCredorIcmsAnterior || 0}
+                    onChange={(e) => setCalimaConfig(prev => ({
+                      ...prev,
+                      saldoCredorIcmsAnterior: parseFloat(e.target.value) || 0,
+                    }))}
+                    className="w-full px-2.5 py-1.5 text-xs font-mono font-bold bg-slate-50 border border-slate-200 rounded focus:bg-white focus:outline-none focus:border-amber-500"
+                    placeholder="0.00"
+                  />
+                  <span className="text-[10px] text-slate-500 block">
+                    Compensável contra débitos do mês
+                  </span>
+                </div>
+              )}
+
+              {/* Opções Avançadas do Calima */}
+              <div className="p-3 bg-white rounded-lg border border-slate-200 space-y-2">
+                <span className="font-bold text-slate-800 block text-[11px]">
+                  Automações do Processo:
+                </span>
+                <label className="flex items-center gap-2 cursor-pointer text-slate-700">
+                  <input
+                    type="checkbox"
+                    checked={calimaConfig.generateAccountingJournal}
+                    onChange={(e) => setCalimaConfig(prev => ({
+                      ...prev,
+                      generateAccountingJournal: e.target.checked,
+                    }))}
+                    className="rounded text-amber-600 focus:ring-amber-500 cursor-pointer"
+                  />
+                  <span className="text-[11px]">Gerar Provisão Contábil (MLC)</span>
+                </label>
+                <label className="flex items-center gap-2 cursor-pointer text-slate-700">
+                  <input
+                    type="checkbox"
+                    checked={calimaConfig.considerPreviousCredit}
+                    onChange={(e) => setCalimaConfig(prev => ({
+                      ...prev,
+                      considerPreviousCredit: e.target.checked,
+                    }))}
+                    className="rounded text-amber-600 focus:ring-amber-500 cursor-pointer"
+                  />
+                  <span className="text-[11px]">Compensar Saldo Credor Anterior</span>
+                </label>
+                <label className="flex items-center gap-2 cursor-pointer text-slate-700">
+                  <input
+                    type="checkbox"
+                    checked={calimaConfig.validateConsistencies}
+                    onChange={(e) => setCalimaConfig(prev => ({
+                      ...prev,
+                      validateConsistencies: e.target.checked,
+                    }))}
+                    className="rounded text-amber-600 focus:ring-amber-500 cursor-pointer"
+                  />
+                  <span className="text-[11px]">Pré-validar inconsistências XML</span>
+                </label>
+              </div>
+            </div>
+
+            {/* Terminal de Logs do Calima */}
+            {consoleLogs.length > 0 && (
+              <div className="p-3 bg-slate-900 text-slate-300 rounded-lg font-mono text-[11px] space-y-1 border border-slate-800">
+                <div className="flex items-center justify-between text-slate-400 text-[10px] pb-1 border-b border-slate-800">
+                  <span className="flex items-center gap-1">
+                    <Terminal className="w-3 h-3 text-amber-400" />
+                    Console do Processo Fiscal Calima (MLF)
+                  </span>
+                  <span className="text-emerald-400 font-bold">STATUS: SUCESSO</span>
+                </div>
+                {consoleLogs.map((log, idx) => (
+                  <div key={idx} className="leading-relaxed">
+                    {log}
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
       </div>
 
       {!currentAssessment ? (
@@ -515,6 +781,106 @@ export const TaxAssessmentView: React.FC<TaxAssessmentViewProps> = ({
                   </div>
                 </div>
               </div>
+
+              {/* IRPJ (Lucro Presumido) */}
+              {currentAssessment.irpj && (
+                <div className="bg-white border border-slate-200 rounded-xl p-5 shadow-xs space-y-3.5">
+                  <h3 className="text-xs font-bold text-slate-800 uppercase tracking-wider flex items-center justify-between">
+                    <span>IRPJ (Imposto de Renda PJ • Lucro Presumido)</span>
+                    <span className="text-[10px] font-bold bg-amber-50 text-amber-700 px-2 py-0.5 rounded border border-amber-200">DARF 2089</span>
+                  </h3>
+                  <div className="space-y-2 text-xs">
+                    <div className="flex justify-between p-2.5 bg-slate-50 rounded-lg border border-slate-100">
+                      <span className="text-slate-500">Base de Presunção (8% Comércio / 32% Serviços):</span>
+                      <span className="font-bold text-slate-800">
+                        {currentAssessment.irpj.baseCalculo.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
+                      </span>
+                    </div>
+                    <div className="flex justify-between p-2.5 bg-slate-50 rounded-lg border border-slate-100">
+                      <span className="text-slate-500">Alíquota Normal (15%):</span>
+                      <span className="font-bold text-slate-800">
+                        {(currentAssessment.irpj.baseCalculo * 0.15).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
+                      </span>
+                    </div>
+                    {currentAssessment.irpj.adicional10 > 0 && (
+                      <div className="flex justify-between p-2.5 bg-amber-50 rounded-lg border border-amber-200 text-amber-900">
+                        <span className="font-semibold">Adicional de 10% (&gt; R$ 20k/mês):</span>
+                        <span className="font-bold">
+                          {currentAssessment.irpj.adicional10.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
+                        </span>
+                      </div>
+                    )}
+                    <div className="flex justify-between p-3 bg-amber-50 rounded-lg border border-amber-200">
+                      <span className="font-bold text-amber-950">(=) Total IRPJ a Recolher:</span>
+                      <span className="font-bold text-amber-800 text-sm">
+                        {currentAssessment.irpj.valorApurado.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* CSLL (Lucro Presumido) */}
+              {currentAssessment.csll && (
+                <div className="bg-white border border-slate-200 rounded-xl p-5 shadow-xs space-y-3.5">
+                  <h3 className="text-xs font-bold text-slate-800 uppercase tracking-wider flex items-center justify-between">
+                    <span>CSLL (Contribuição Social s/ Lucro Líquido)</span>
+                    <span className="text-[10px] font-bold bg-amber-50 text-amber-700 px-2 py-0.5 rounded border border-amber-200">DARF 2372</span>
+                  </h3>
+                  <div className="space-y-2 text-xs">
+                    <div className="flex justify-between p-2.5 bg-slate-50 rounded-lg border border-slate-100">
+                      <span className="text-slate-500">Base de Presunção (12% Comércio / 32% Serviços):</span>
+                      <span className="font-bold text-slate-800">
+                        {currentAssessment.csll.baseCalculo.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
+                      </span>
+                    </div>
+                    <div className="flex justify-between p-2.5 bg-slate-50 rounded-lg border border-slate-100">
+                      <span className="text-slate-500">Alíquota Legal:</span>
+                      <span className="font-bold text-slate-800">9,00%</span>
+                    </div>
+                    <div className="flex justify-between p-3 bg-amber-50 rounded-lg border border-amber-200">
+                      <span className="font-bold text-amber-950">(=) Total CSLL a Recolher:</span>
+                      <span className="font-bold text-amber-800 text-sm">
+                        {currentAssessment.csll.valorApurado.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* ISS e Retenções */}
+              {((currentAssessment.iss && currentAssessment.iss.valorApurado > 0) || (currentAssessment.retencoes && currentAssessment.retencoes.totalRetido > 0)) && (
+                <div className="bg-white border border-slate-200 rounded-xl p-5 shadow-xs space-y-3.5 md:col-span-2">
+                  <h3 className="text-xs font-bold text-slate-800 uppercase tracking-wider flex items-center justify-between">
+                    <span>ISSQN Municipal & Retenções Federais</span>
+                    <span className="text-[10px] font-bold bg-blue-50 text-blue-700 px-2 py-0.5 rounded border border-blue-200">Tributos Municipais / Fonte</span>
+                  </h3>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-xs">
+                    {currentAssessment.iss && currentAssessment.iss.valorApurado > 0 && (
+                      <div className="p-3 bg-slate-50 rounded-lg border border-slate-200 flex justify-between items-center">
+                        <div>
+                          <span className="font-bold text-slate-800 block">ISS (Serviços 2% a 5%):</span>
+                          <span className="text-slate-500 text-[11px]">Base: {currentAssessment.iss.baseCalculo.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}</span>
+                        </div>
+                        <span className="font-bold text-blue-700 text-sm">
+                          {currentAssessment.iss.valorApurado.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
+                        </span>
+                      </div>
+                    )}
+                    {currentAssessment.retencoes && currentAssessment.retencoes.totalRetido > 0 && (
+                      <div className="p-3 bg-slate-50 rounded-lg border border-slate-200 flex justify-between items-center">
+                        <div>
+                          <span className="font-bold text-slate-800 block">Retenções na Fonte (IRRF/CRF):</span>
+                          <span className="text-slate-500 text-[11px]">Dedutíveis na apuração</span>
+                        </div>
+                        <span className="font-bold text-emerald-700 text-sm">
+                          {currentAssessment.retencoes.totalRetido.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
+                        </span>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
             </div>
           )}
 

@@ -1,4 +1,4 @@
-import { Company, FiscalDocument, TaxAssessment, TaxGuide } from '../types';
+import { Company, FiscalDocument, TaxAssessment, TaxGuide, CalimaProcessConfig } from '../types';
 
 // Tabelas Oficiais do Simples Nacional (Lei Complementar 123/2006 atualizada)
 interface SimplesFaixa {
@@ -49,7 +49,8 @@ const TABELA_ANEXO_V: SimplesFaixa[] = [
 export function calculateTaxAssessment(
   company: Company,
   competencia: string,
-  documents: FiscalDocument[]
+  documents: FiscalDocument[],
+  calimaConfig?: Partial<CalimaProcessConfig>
 ): TaxAssessment {
   // Filtrar notas da empresa e competência
   const docs = documents.filter(d => d.companyId === company.id && d.status === 'NORMAL');
@@ -62,6 +63,9 @@ export function calculateTaxAssessment(
 
   const guias: TaxGuide[] = [];
   const assessmentId = `assess-${company.id}-${competencia.replace('/', '')}`;
+  const selectedTaxes = calimaConfig?.selectedTaxes || [
+    'DAS', 'ICMS', 'PIS', 'COFINS', 'IRPJ', 'CSLL', 'ISS', 'RETENCOES'
+  ];
 
   if (company.regimeTributario === 'SIMPLES_NACIONAL') {
     let anexo = company.anexoSimples || 'ANEXO_I';
@@ -136,7 +140,7 @@ export function calculateTaxAssessment(
     };
 
     // Guia DAS
-    if (valorDevido > 0) {
+    if (selectedTaxes.includes('DAS') && valorDevido > 0) {
       guias.push({
         id: `guia-das-${competencia.replace('/', '')}`,
         tipo: 'DAS',
@@ -178,19 +182,37 @@ export function calculateTaxAssessment(
       guias,
     };
   } else {
-    // Lucro Presumido ou Real
-    // ICMS: Débitos das saídas menos créditos das entradas
+    // Lucro Presumido ou Real (MLF Calima Engine)
+    // ICMS: Débitos das saídas menos créditos das entradas e saldo credor anterior
     const totalDebitosIcms = saidas.reduce((acc, curr) => acc + curr.impostos.valorIcms, 0);
     const totalCreditosIcms = entradas.reduce((acc, curr) => acc + curr.impostos.valorIcms, 0);
-    const saldoApuradoIcms = Math.round((totalDebitosIcms - totalCreditosIcms) * 100) / 100;
+    const saldoAnterior = calimaConfig?.considerPreviousCredit ? (calimaConfig.saldoCredorIcmsAnterior || 0) : 0;
+    const saldoApuradoIcms = Math.round((totalDebitosIcms - totalCreditosIcms - saldoAnterior) * 100) / 100;
 
     // PIS e COFINS (Lucro Presumido cumulativo: PIS 0.65%, COFINS 3.00%)
     const basePisCofins = faturamentoTotal;
     const valorPis = Math.round(basePisCofins * 0.0065 * 100) / 100;
     const valorCofins = Math.round(basePisCofins * 0.0300 * 100) / 100;
 
+    // IRPJ e CSLL (Lucro Presumido: presunção de 8% comércio ou 32% serviços)
+    const isServico = company.atividadePrincipal?.toLowerCase().includes('serviço') || company.cnae?.startsWith('62') || company.cnae?.startsWith('69');
+    const percentualPresuncaoIrpj = isServico ? 32 : 8;
+    const baseTributavelIrpj = Math.round(faturamentoTotal * (percentualPresuncaoIrpj / 100) * 100) / 100;
+    const valorIrpjBase = Math.round(baseTributavelIrpj * 0.15 * 100) / 100;
+    const adicional10 = baseTributavelIrpj > 20000 ? Math.round((baseTributavelIrpj - 20000) * 0.10 * 100) / 100 : 0;
+    const valorTotalIrpj = Math.round((valorIrpjBase + adicional10) * 100) / 100;
+
+    const percentualPresuncaoCsll = isServico ? 32 : 12;
+    const baseTributavelCsll = Math.round(faturamentoTotal * (percentualPresuncaoCsll / 100) * 100) / 100;
+    const valorCsll = Math.round(baseTributavelCsll * 0.09 * 100) / 100;
+
+    const valorIss = isServico ? Math.round(faturamentoTotal * 0.03 * 100) / 100 : 0;
+    const crfRetido = isServico ? Math.round(faturamentoTotal * 0.0465 * 100) / 100 : 0;
+    const irrfRetido = isServico ? Math.round(faturamentoTotal * 0.015 * 100) / 100 : 0;
+    const totalRetido = Math.round((crfRetido + irrfRetido) * 100) / 100;
+
     // Guias Lucro Presumido
-    if (saldoApuradoIcms > 0) {
+    if (selectedTaxes.includes('ICMS') && saldoApuradoIcms > 0) {
       guias.push({
         id: `guia-icms-${competencia.replace('/', '')}`,
         tipo: 'GNRE',
@@ -210,7 +232,7 @@ export function calculateTaxAssessment(
       });
     }
 
-    if (valorPis > 0) {
+    if (selectedTaxes.includes('PIS') && valorPis > 0) {
       guias.push({
         id: `guia-pis-${competencia.replace('/', '')}`,
         tipo: 'DARF',
@@ -230,7 +252,7 @@ export function calculateTaxAssessment(
       });
     }
 
-    if (valorCofins > 0) {
+    if (selectedTaxes.includes('COFINS') && valorCofins > 0) {
       guias.push({
         id: `guia-cofins-${competencia.replace('/', '')}`,
         tipo: 'DARF',
@@ -250,6 +272,46 @@ export function calculateTaxAssessment(
       });
     }
 
+    if (selectedTaxes.includes('IRPJ') && valorTotalIrpj > 0) {
+      guias.push({
+        id: `guia-irpj-${competencia.replace('/', '')}`,
+        tipo: 'DARF',
+        codigoReceita: '2089',
+        descricao: `DARF IRPJ Lucro Presumido - Cód 2089 - Comp. ${competencia}`,
+        competencia,
+        dataVencimento: getNextDueDay(competencia, 30),
+        valorPrincipal: valorTotalIrpj,
+        multa: 0,
+        juros: 0,
+        valorTotal: valorTotalIrpj,
+        codigoBarras: generateSimulationBarcode('DARF-IRPJ', valorTotalIrpj),
+        linhaDigitavel: generateSimulationDigitableLine('DARF-IRPJ', valorTotalIrpj),
+        status: 'A_VENCER',
+        ambiente: 'HOMOLOGACAO_SIMULACAO',
+        avisoLegal: 'DOCUMENTO DEMONSTRATIVO DE MEMÓRIA FISCAL - NÃO REGISTRADO NA CIP/FEBRABAN - NÃO EFETUAR PAGAMENTO',
+      });
+    }
+
+    if (selectedTaxes.includes('CSLL') && valorCsll > 0) {
+      guias.push({
+        id: `guia-csll-${competencia.replace('/', '')}`,
+        tipo: 'DARF',
+        codigoReceita: '2372',
+        descricao: `DARF CSLL Lucro Presumido - Cód 2372 - Comp. ${competencia}`,
+        competencia,
+        dataVencimento: getNextDueDay(competencia, 30),
+        valorPrincipal: valorCsll,
+        multa: 0,
+        juros: 0,
+        valorTotal: valorCsll,
+        codigoBarras: generateSimulationBarcode('DARF-CSLL', valorCsll),
+        linhaDigitavel: generateSimulationDigitableLine('DARF-CSLL', valorCsll),
+        status: 'A_VENCER',
+        ambiente: 'HOMOLOGACAO_SIMULACAO',
+        avisoLegal: 'DOCUMENTO DEMONSTRATIVO DE MEMÓRIA FISCAL - NÃO REGISTRADO NA CIP/FEBRABAN - NÃO EFETUAR PAGAMENTO',
+      });
+    }
+
     return {
       id: assessmentId,
       companyId: company.id,
@@ -262,7 +324,7 @@ export function calculateTaxAssessment(
       icms: {
         totalDebitos: totalDebitosIcms,
         totalCreditos: totalCreditosIcms,
-        saldoAnterior: 0,
+        saldoAnterior,
         saldoApurado: saldoApuradoIcms,
       },
       pis: {
@@ -275,6 +337,33 @@ export function calculateTaxAssessment(
         aliquota: 3.00,
         valorApurado: valorCofins,
       },
+      irpj: {
+        baseCalculo: faturamentoTotal,
+        percentualPresuncao: percentualPresuncaoIrpj,
+        baseTributavel: baseTributavelIrpj,
+        aliquota: 15,
+        valorApurado: valorIrpjBase,
+        adicional10,
+        valorTotalDevido: valorTotalIrpj,
+      },
+      csll: {
+        baseCalculo: faturamentoTotal,
+        percentualPresuncao: percentualPresuncaoCsll,
+        baseTributavel: baseTributavelCsll,
+        aliquota: 9,
+        valorApurado: valorCsll,
+      },
+      iss: valorIss > 0 ? {
+        baseCalculo: faturamentoTotal,
+        aliquota: 3,
+        valorApurado: valorIss,
+      } : undefined,
+      retencoes: totalRetido > 0 ? {
+        baseCalculo: faturamentoTotal,
+        crfRetido,
+        irrfRetido,
+        totalRetido,
+      } : undefined,
       guias,
     };
   }

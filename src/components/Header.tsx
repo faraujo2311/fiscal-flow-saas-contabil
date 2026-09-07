@@ -17,7 +17,7 @@ import {
   Clock,
   Settings
 } from 'lucide-react';
-import { Company, Competence, OfficeTenant, SystemCustomization, SystemUser } from '../types';
+import { Company, Competence, OfficeTenant, SystemCustomization, SystemUser, SystemModuleId } from '../types';
 import { AutoSyncState } from '../services/autoSyncService';
 import { getTheme } from '../utils/theme';
 
@@ -37,6 +37,8 @@ interface HeaderProps {
   onOpenCompetenceModal?: () => void;
   autoSyncState?: AutoSyncState;
   sessionMinutesRemaining?: number;
+  activeModule?: SystemModuleId;
+  onSelectModule?: (mod: SystemModuleId) => void;
 }
 
 export const Header: React.FC<HeaderProps> = ({
@@ -55,6 +57,8 @@ export const Header: React.FC<HeaderProps> = ({
   onOpenCompetenceModal,
   autoSyncState,
   sessionMinutesRemaining,
+  activeModule = 'ALL',
+  onSelectModule,
 }) => {
   const theme = getTheme(customization?.primaryThemeColor);
   const currentCompObj = competences.find(
@@ -93,6 +97,59 @@ export const Header: React.FC<HeaderProps> = ({
 
         {/* Controles de Empresa, Competência, Sincronização e Logout */}
         <div className="flex flex-wrap items-center gap-2.5">
+          {/* Seletor de Módulo Operacional (Fiscal, Contábil, Folha) */}
+          {onSelectModule && (
+            <div className="hidden lg:flex items-center bg-slate-100 border border-slate-200 rounded-lg p-0.5 text-xs">
+              <button
+                type="button"
+                onClick={() => onSelectModule('ALL')}
+                className={`px-2.5 py-1 rounded-md text-[11px] font-bold transition-all cursor-pointer ${
+                  activeModule === 'ALL'
+                    ? 'bg-slate-800 text-white shadow-xs'
+                    : 'text-slate-600 hover:text-slate-900 hover:bg-slate-200/70'
+                }`}
+              >
+                Geral
+              </button>
+              <button
+                type="button"
+                onClick={() => onSelectModule('FISCAL')}
+                className={`px-2.5 py-1 rounded-md text-[11px] font-bold transition-all flex items-center gap-1.5 cursor-pointer ${
+                  activeModule === 'FISCAL'
+                    ? 'bg-amber-600 text-white shadow-xs'
+                    : 'text-amber-800 hover:bg-amber-100/70'
+                }`}
+              >
+                <span className="w-1.5 h-1.5 rounded-full bg-amber-400"></span>
+                Fiscal (MLF)
+              </button>
+              <button
+                type="button"
+                onClick={() => onSelectModule('CONTABIL')}
+                className={`px-2.5 py-1 rounded-md text-[11px] font-bold transition-all flex items-center gap-1.5 cursor-pointer ${
+                  activeModule === 'CONTABIL'
+                    ? 'bg-blue-600 text-white shadow-xs'
+                    : 'text-blue-800 hover:bg-blue-100/70'
+                }`}
+              >
+                <span className="w-1.5 h-1.5 rounded-full bg-blue-400"></span>
+                Contábil (MLC)
+              </button>
+              <button
+                type="button"
+                onClick={() => onSelectModule('FOLHA')}
+                className={`px-2.5 py-1 rounded-md text-[11px] font-bold transition-all flex items-center gap-1.5 cursor-pointer ${
+                  activeModule === 'FOLHA'
+                    ? 'bg-emerald-600 text-white shadow-xs'
+                    : 'text-emerald-800 hover:bg-emerald-100/70'
+                }`}
+              >
+                <span className="w-1.5 h-1.5 rounded-full bg-emerald-400"></span>
+                Folha (MLP)
+              </button>
+            </div>
+          )}
+
           {/* Seletor e Gestão de Empresa Cliente */}
           <div className="flex items-center bg-slate-50 border border-slate-200 rounded-lg pl-3 pr-1 py-1 hover:border-slate-300 transition-colors">
             <Building2 className={`w-4 h-4 ${theme.textPrimary} mr-2 shrink-0`} />
